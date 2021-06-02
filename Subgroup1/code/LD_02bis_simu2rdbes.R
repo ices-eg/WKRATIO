@@ -42,10 +42,9 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 			       SelectionMethods = list())
   myNewTestData <- makeTestDataMoreRealistic(DataToUse = myTestData,CountryToUse="ZZ",YearToUse="1965",MetierList= NULL,SpeciesList= NULL,RDBEScodeLists=allowedValues)
   #load simudat and add it to the myTestData
+
   # The data we just geenerated is too random and won't pass validation or upload check - lets fix that now
   datrdb<- makeTestDataMoreRealistic(DataToUse = myTestData,CountryToUse=myCountry,YearToUse=myYear,MetierList= NULL,SpeciesList= NULL,RDBEScodeLists=allowedValues)
-
-
   #use simudat to populate datrdb for all the year ?
   datsim<-readRDS("../outputs/datasimu2.rds")
   #DE
@@ -76,7 +75,6 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
   tmp2<-tmp%>%select(year,namevess)%>%distinct()%>%
 	  mutate(newVDid=row_number())
   tmp<-left_join(tmp,tmp2)
-
   #add info to the table
   datrdb$VS<-datrdb$VS[rep(1,nrow(tmp)),]%>%
 	  mutate(VSid=1:nrow(tmp),
@@ -100,7 +98,6 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 		 VDencryptedVesselCode=tmp$namevess,
 		 VDyear=tmp$year,
 		 VDlengthCategory=NA)
-
   #FT
   tmp<-datsim%>%mutate(namevess=paste0(gear,VDid),
 		       namestrat=paste0("year",year,gear))%>%
@@ -169,61 +166,85 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 		 FOunitName=tmp$namefo,
 		 FTid=tmp$FTid)
   #SL
-
-  #SA
-
-  #FM
-
-
-
-
-
-
-
-
-
-  
-
-  #FT
-  FT0<-datsim
-
-
-  #FO
-  datsimFO<-datsim%>%select(nsamp,gear,year,FOid)%>%distinct()
-  datrdb$FO<-datrdb$FO[rep(1,nrow(datsimFO)),]%>%
-	  mutate(FOid=datsimFO$FOid,
-		 FOendDate=datsimFO$year,
-		 FOgear=datsimFO$gear)
-  #SL
-  datsimSL<-datsim%>%select(spp,year)%>%distinct()
-  datrdb$SL<-datrdb$SL[rep(1,nrow(datsimSL)),]%>%
-	  mutate(SLid=1:nrow(datsimSL),
-		 SLspeciesListName=paste0("ZZ_",datsimSL$year,"_SpeciesList"),
-		 SLyear=datsimSL$year,
-		 SLcommercialTaxon=datsimSL$spp)
-  #SS
-  datsimSS<-datsim%>%filter(n>0)%>%select(nsamp,gear,spp,year,FOid)%>%distinct()%>%
-	  group_by(nsamp,gear,year,FOid)%>%summarise(n=n_distinct(spp))%>%
+  tmp<-datsim%>%select(year,spp)%>%distinct()%>%
+	  group_by(year)%>%
+	  mutate(namespplist=paste0("ZZ_",year,"_SpeciesList"))%>%
 	  ungroup()
-  datrdb$SS<-datrdb$SS[rep(1,nrow(datsimSS)),]%>%
-	  mutate(SSid=datsimSS$FOid,
-		 SSspeciesListName=paste0("ZZ_",datsimSS$year,"_SpeciesList"),
-		 SSnumberTotal=21,
-		 SSnumberSampled=datsimSS$n,
-		 FOid=datsimSS$FOid)
+  datrdb$SL<-datrdb$SL[rep(1,nrow(tmp)),]%>%
+	  mutate(SLid=1:nrow(tmp),
+		 SLinstitute="in silico",
+		 SLspeciesListName=tmp$namespplist,
+		 SLyear=tmp$year,
+		 SLcatchFraction="all",
+		 SLcommercialTaxon=tmp$spp,
+		 SLspeciesCode=NA)
 
-  #SA
-  datsimSAFM<-datsim%>%
-	  group_by(spp,FOid)%>%mutate(SAid=cur_group_id())%>%ungroup()%>%
-	  group_by(spp,FOid,len)%>%mutate(FMid=cur_group_id())%>%ungroup()
-  datsimSA<-datsimSAFM%>%select(spp,FOid,gear,SAid,wspptot)%>%distinct()
-  datrdb$SA<-datrdb$SA[rep(1,nrow(datsimSA)),]%>%
-	  mutate(SAid=datsimSA$SAid,
-		 SAspeciesCode=datsimSA$spp,
-		 SAgear=datsimSA$gear,
-		 SAtotalWeightMeasured=datsimSA$wspptot,
-		 SAsampleWeightMeasured=datsimSA$wspptot,
-		 SSid=datsimSA$FOid)
+  #############again
+
+  #prep pk and parameters inside the datsim object
+  tmp<-datsim%>%
+	  #FM
+	  group_by(year,gear,FOid,TRid,VDid,spp,len)%>%
+	  mutate(newFMid=cur_group_id())%>%ungroup()%>%
+  	  #SA
+	  group_by(year,gear,FOid,TRid,VDid,spp)%>%
+	  mutate(newSAid=cur_group_id(),
+		 SAwtot=sum(wspp),SAwsamp=sum(wspp),
+		 SAntot=n_distinct(len),SAnsamp=n_distinct(len),
+		 SAsel="Census",SAname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+	  #SS
+	  group_by(year,gear,FOid,TRid,VDid)%>%
+	  mutate(newSSid=cur_group_id(),
+		 SSntot=n_distinct(spp),SSnsamp=n_distinct(spp),
+		 SSsel="Census",SSname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+	  #FO
+	  group_by(year,gear,FOid,TRid,VDid)%>%
+	  mutate(newFOid=cur_group_id())%>%
+	  group_by(year,gear,TRid,VDid)%>%
+	  mutate(FOntot=n_distinct(FOid),FOnsamp=n_distinct(FOid))%>%ungroup()%>%
+	  mutate(FOsel="Census",FOname=paste(year,gear,VDid,TRid,FOid,sep="_"),
+		 FOstratname=paste(year,gear,VDid,TRid,sep="_"))%>%#ungroup()
+	  #FT
+	  group_by(year,gear,TRid,VDid)%>%
+	  mutate(newFTid=cur_group_id())%>%
+	  group_by(year,gear,VDid)%>%
+	  mutate(FTntot=n_distinct(TRid),FTnsamp=n_distinct(TRid))%>%ungroup()%>%
+	  mutate(FTsel="Census",FTname=paste(year,gear,VDid,TRid,sep="_"),
+		 FTstratname=paste(year,gear,VDid,sep="_"))%>%#ungroup()
+	  #VS
+	  group_by(year,gear,VDid)%>%
+	  mutate(newVSid=cur_group_id())%>%
+	  group_by(year,gear)%>%
+	  mutate(VSntot=n_distinct(VDid),VSnsamp=n_distinct(VDid))%>%ungroup()%>%
+	  mutate(VSsel="Census",VSname=paste(year,gear,VDid,sep="_"),
+		 VSstratname=paste(year,gear,sep="_"))%>%#ungroup()
+	  #SD & DE
+	  group_by(year)%>%
+	  mutate(newSDid=cur_group_id(),newDEid=cur_group_id())%>%
+	  ungroup()
+  	
+  
+	  tmp%>%select(year,gear,FOid,TRid,VDid,spp,#len,
+		       #newFMid,
+		       #newSAid,SAntot,SAnsamp,SAname,
+		       newSSid,SSntot,SSnsamp,SSname,
+		       newFOid,FOntot,FOnsamp,FOname,FOstratname,
+		       newFTid,FTntot,FTnsamp,FTname,FTstratname,
+		       newVSid,VSntot,VSnsamp,VSname,VSstratname
+		       )%>%distinct()%>%
+		  head(1000)%>%View
+  
+  #FM
+  pipo<-tmp%>%transmute(newFMid,len,n,newSAid)%>%distinct()
+  datrdb$FM[rep(1,nrow(pipo),]
+
+
+
+
+
+
+
+
   #FM
   datsimFMl<-datsimSAFM%>%select(SAid,FMid,len,n)%>%distinct()%>%mutate(type="l")
   datsimFMw<-datsimSAFM%>%select(SAid,FMid,n,wind)%>%distinct()%>%mutate(type="w")
