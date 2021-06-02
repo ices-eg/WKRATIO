@@ -242,12 +242,16 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
   return(list(cl=data.frame(clrdb),samp=datrdb))
 }
 
+ #populate with complete datsim
  rez<-sim2rdbes(datsim,datrdb)
-
   #save
   saveRDS(rez$samp,file="../outputs/datrdbsimpop.rds")
-  saveRDS(rez$cl,file="../outputs/datclrdbsimpop.rds")
+  saveRDS(rez$cl,file="../outputs/datclrdbsim.rds")
 
+ #populate with sampled datsim
+ rez2<-sim2rdbes(datsim%>%filter(FOsamp),datrdb)
+  #save
+  saveRDS(rez$samp,file="../outputs/datrdbsimsamp.rds")
 
 
 
