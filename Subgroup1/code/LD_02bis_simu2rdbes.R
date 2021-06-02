@@ -47,140 +47,11 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
   datrdb<- makeTestDataMoreRealistic(DataToUse = myTestData,CountryToUse=myCountry,YearToUse=myYear,MetierList= NULL,SpeciesList= NULL,RDBEScodeLists=allowedValues)
   #use simudat to populate datrdb for all the year ?
   datsim<-readRDS("../outputs/datasimu2.rds")
-  #DE
-  tmp<-datsim%>%transmute(year)%>%distinct()
-  datrdb$DE<-datrdb$DE[rep(1,nrow(tmp)),]%>%
-	  mutate(DEid=1:nrow(tmp),
-		 DEsamplingScheme="SIM stratified sampling",
-		 DEsamplingSchemeType="National Routine",
-		 DEyear=tmp$year,
-		 DEstratumName="Fleet")
-  #SD
-  datrdb$SD<-datrdb$SD[rep(1,nrow(datrdb$DE)),]%>%
-	  mutate(SDid=1:nrow(datrdb$DE),
-		 SDinstitution="in silico",
-		 DEid=datrdb$DE$DEid)
-  #VS
-  tmp<-datsim%>%group_by(year,gear)%>%
-	  mutate(nbvess=n_distinct(VDid))%>%
-	  ungroup()%>%
-	  select(year,gear,nbvess,VDid)%>%
-	  distinct()%>%
-	  group_by(year,gear)%>%
-	  mutate(VDidseq=row_number())%>%
-	  ungroup()%>%
-	  mutate(namevess=paste0(gear,VDid))%>%
-	  mutate(namestrat=paste0("year",year,gear))
-  #prepare info VD: based add the VSid in tmp
-  tmp2<-tmp%>%select(year,namevess)%>%distinct()%>%
-	  mutate(newVDid=row_number())
-  tmp<-left_join(tmp,tmp2)
-  #add info to the table
-  datrdb$VS<-datrdb$VS[rep(1,nrow(tmp)),]%>%
-	  mutate(VSid=1:nrow(tmp),
-		 VSsequenceNumber=tmp$VDidseq,
-		 VSencryptedVesselCode=tmp$namevess,
-		 VSstratification="Y",
-		 VSstratumName=tmp$namestrat,
-		 VSsampler="Observer",
-		 VSnumberTotal=tmp$nbvess,
-		 VSnumberSampled=tmp$nbvess,
-		 VSselectionProb=1,
-		 VSinclusionProb=NA,
-		 VSselectionMethod="Census",
-		 VSunitName=tmp$VDid,
-		 VDid=tmp$newVDid
-		 )
-  #VD
-  tmp<-tmp%>%select(newVDid,year,namevess)%>%distinct() 
-  datrdb$VD<-datrdb$VD[rep(1,nrow(tmp)),]%>%
-	  mutate(VDid=tmp$newVDid,
-		 VDencryptedVesselCode=tmp$namevess,
-		 VDyear=tmp$year,
-		 VDlengthCategory=NA)
-  #FT
-  tmp<-datsim%>%mutate(namevess=paste0(gear,VDid),
-		       namestrat=paste0("year",year,gear))%>%
-	 select(year,gear,namestrat,namevess,TRid,FOid)%>%distinct()%>%
-	 group_by(year,gear,namestrat,namevess,TRid)%>%summarise(nfo=n())%>%
-	 group_by(year,gear,namestrat,namevess)%>%mutate(ntr=n_distinct(TRid))%>%
-	 ungroup()%>%
-	 group_by(year,gear,namestrat,namevess)%>%
-	 mutate(TRidseq=row_number())%>%
-	 ungroup()
-  tmp2<-datrdb$VD%>%transmute(year=VDyear,namevess=VDencryptedVesselCode,VDid)%>%distinct()
-  tmp<-left_join(tmp,tmp2)
-  tmp2<-datrdb$VS%>%transmute(namevess=VSencryptedVesselCode,
-			      namestrat=VSstratumName,
-			      VSid)%>%distinct()
-  tmp<-left_join(tmp,tmp2)%>%mutate(namestrattr=paste0(namevess,"_",namestrat),
-				    nametrip=paste0(namevess,"trip",TRid))
-  datrdb$FT<-datrdb$FT[rep(1,nrow(tmp)),]%>%
-	  mutate(FTid=1:nrow(tmp),
-		 FTencryptedVesselCode=tmp$namevess,
-		 FTsequencenumber=tmp$TRidseq,
-		 FTstratification="Y",
-		 FTstratumName=tmp$namestrattr,
-		 FTsample="Observer",
-		 FTnumberOfHauls=tmp$nfo,
-		 FTdepartureDate=NA,
-		 FTarrivalDate=tmp$year,
-		 FTnumbertotal=tmp$ntr,
-		 FTnumberSampled=tmp$ntr,
-		 FTselectionMethod="Census",
-		 FTunitName=tmp$nametrip,
-		 VSid=tmp$VSid,
-		 VDid=tmp$VDid)
-  #FO
-  tmp<-datsim%>%mutate(namevess=paste0(gear,VDid),
-		       namestrat=paste0("year",year,gear),
-		       namestrattr=paste0(namevess,"_",namestrat),
-		       nametrip=paste0(namevess,"trip",TRid))%>%
-	 select(year,gear,namevess,namestrattr,nametrip,FOid)%>%distinct()%>%
-	 group_by(year,gear,namevess,namestrattr,nametrip)%>%
-	 mutate(nfo=n_distinct(FOid))%>%
-	 ungroup()%>%
-	 group_by(year,gear,namevess,namestrattr,nametrip)%>%
-	 mutate(FOidseq=row_number())%>%
-	 ungroup()
-  tmp2<-datrdb$FT%>%transmute(namevess=FTencryptedVesselCode,
-			      namestrattr=FTstratumName,
-			      nametrip=FTunitName,
-			      FTid)%>%distinct()
-  tmp<-left_join(tmp,tmp2)%>%mutate(namestratfo=paste0(namestrattr,"_",nametrip),
-				    namefo=paste0(nametrip,"fo",FOid))
-  datrdb$FO<-datrdb$FO[rep(1,nrow(tmp)),]%>%
-	  mutate(FOid=1:nrow(tmp),
-		 FOsequenceNumber=tmp$FOidseq,
-		 FOsampler="Observer",
-		 FOvalidity="V",
-		 FOendDate=tmp$year,
-		 FOarea=NA,
-		 FOgsaSubarea=NA,
-		 FOmetier6=tmp$gear,
-		 FOgear=tmp$gear,
-		 FOobservationCode=NA,
-		 FOnumberTotal=tmp$nfo,
-		 FOnumberSampled=tmp$nfo,
-		 FOselectionMethod="SS",
-		 FOunitName=tmp$namefo,
-		 FTid=tmp$FTid)
-  #SL
-  tmp<-datsim%>%select(year,spp)%>%distinct()%>%
-	  group_by(year)%>%
-	  mutate(namespplist=paste0("ZZ_",year,"_SpeciesList"))%>%
-	  ungroup()
-  datrdb$SL<-datrdb$SL[rep(1,nrow(tmp)),]%>%
-	  mutate(SLid=1:nrow(tmp),
-		 SLinstitute="in silico",
-		 SLspeciesListName=tmp$namespplist,
-		 SLyear=tmp$year,
-		 SLcatchFraction="all",
-		 SLcommercialTaxon=tmp$spp,
-		 SLspeciesCode=NA)
 
-  #############again
+  #a function to translate simulation data into RDBES data
 
+ sim2rdbes<-function(datsim,datrdb){
+  #prep data for rdbes
   #prep pk and parameters inside the datsim object
   tmp<-datsim%>%
 	  #FM
@@ -222,8 +93,7 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 	  group_by(year)%>%
 	  mutate(newSDid=cur_group_id(),newDEid=cur_group_id())%>%
 	  ungroup()
-  	
-  
+  if(F){
 	  tmp%>%select(year,gear,FOid,TRid,VDid,spp,#len,
 		       #newFMid,
 		       #newSAid,SAntot,SAnsamp,SAname,
@@ -233,37 +103,123 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 		       newVSid,VSntot,VSnsamp,VSname,VSstratname
 		       )%>%distinct()%>%
 		  head(1000)%>%View
-  
+  }
   #FM
   pipo<-tmp%>%transmute(newFMid,len,n,newSAid)%>%distinct()
-  datrdb$FM[rep(1,nrow(pipo),]
-
-
-
-
-
-
-
-
-  #FM
-  datsimFMl<-datsimSAFM%>%select(SAid,FMid,len,n)%>%distinct()%>%mutate(type="l")
-  datsimFMw<-datsimSAFM%>%select(SAid,FMid,n,wind)%>%distinct()%>%mutate(type="w")
-  FMl<-datrdb$FM[rep(1,nrow(datsimFMl)),]%>%
-	  mutate(FMid=datsimFMl$FMid,
-		 FMclass=datsimFMl$len,
-		 FMnumberAtUnit=datsimFMl$n,
-		 FMtype=datsimFMl$type,
-		 SAid=datsimFMl$SAid)
-  FMw<-datrdb$FM[rep(1,nrow(datsimFMw)),]%>%
-	  mutate(FMid=datsimFMw$FMid,
-		 FMclass=datsimFMw$wind,
-		 FMnumberAtUnit=datsimFMw$n,
-		 FMtype=datsimFMw$type,
-		 SAid=datsimFMw$SAid)
-  datrdb$FM<-rbind(FMl,FMw)
-
-  #CL data
-  cl<-readRDS("../outputs/datapop.rds")%>%filter(year==1)%>%filter(value>0)
+  datrdb$FM<-datrdb$FM[rep(1,nrow(pipo)),]%>%
+	  mutate(FMid=pipo$newFMid,
+		 FMclass=pipo$len,
+		 FMnumberAtUnit=pipo$n,
+		 FMtype="Length",
+		 SAid=pipo$newSAid)
+  #SA
+  pipo<-tmp%>%transmute(newSAid,newSSid,spp,gear,SAwtot,SAwsamp,SAnsamp,SAntot,SAsel,SAname)%>%distinct()
+  datrdb$SA<-datrdb$SA[rep(1,nrow(pipo)),]%>%
+	  mutate(SAid=pipo$newSAid,
+		 SAsequenceNumber=NA,
+		 SAspeciesCode=NA,
+		 SAspeciesCodeFAO=pipo$spp,
+		 SApresentation=NA,
+		 SAspecimensState=NA,
+		 SAcatchCategory="all",
+		 SAsex="U",
+		 SAmetier6=pipo$gear,
+		 SAgear=pipo$gear,
+		 SAunitType="Haul",
+		 SAnumberTotal=pipo$SAntot,
+		 SAnumberSampled=pipo$SAnsamp,
+		 SAselectionMethod="Census",
+		 SAunitName=pipo$SAname,
+		 SAtotalWeightMeasured=pipo$SAwtot,
+		 SAsampleWeightMeasured=pipo$SAwsamp,
+		 SSid=pipo$newSSid)
+  #SS
+  pipo<-tmp%>%transmute(newSSid,newFOid,SSntot,SSnsamp,SSsel,SSname,SLname=paste0(year,gear))%>%distinct()
+  datrdb$SS<-datrdb$SS[rep(1,nrow(pipo)),]%>%
+	  mutate(SSid=pipo$newSSid,
+		 SSsequenceNumber=NA,
+		 SSobservationActivityType="haul",
+		 SScatchFraction="All",
+		 SSspeciesListName=pipo$SLname,
+		 SSnumberTotal=pipo$SSntot,
+		 SSnumberSampled=pipo$SSnsamp,
+		 SSselectionMethod="Census",
+		 SSunitName=pipo$SSname,
+		 FOid=pipo$newFOid)
+  #SL
+  pipo<-tmp%>%transmute(SLname=paste0(year,gear),year,spp)%>%distinct()
+  datrdb$SL<-datrdb$SL[rep(1,nrow(pipo)),]%>%
+	  mutate(SSid=1:nrow(pipo),
+		 SLinstitute="in silico",
+		 SLspeciesListName=pipo$SLname,
+		 SLyear=pipo$year,
+		 SLcatchFraction="All",
+		 SLcommercialTaxon=pipo$spp,
+		 SLspeciesCode=NA)
+  #FO
+  pipo<-tmp%>%transmute(newFOid,newFTid,gear,year,FOntot,FOnsamp,FOstratname,FOname,FOsel)%>%distinct()
+  datrdb$FO<-datrdb$FO[rep(1,nrow(pipo)),]%>%
+	  mutate(FOid=pipo$newFOid,
+		 FOsequenceNumber=NA,
+		 FOstratification="Y",
+		 FOstratumName=pipo$FOstratname,
+		 FOvalidity="V",
+		 FOendDate=pipo$year,
+		 FOmetier6=pipo$gear,
+		 FOgear=pipo$gear,
+		 FOnumberSampled=pipo$FOnsamp,
+		 FOnumberTotal=pipo$FOntot,
+		 FOselectionMethod=pipo$FOsel,
+		 FTid=pipo$newFTid)
+  #FT
+  pipo<-tmp%>%transmute(newFTid,newVSid,gear,year,FTntot,FTnsamp,FTstratname,FTname,FTsel,VSname,FOntot)%>%distinct()
+  datrdb$FT<-datrdb$FT[rep(1,nrow(pipo)),]%>%
+	  mutate(FTid=pipo$newFTid,
+		 FTsequenceNumber=NA,
+		 FTencryptedVesselCode=pipo$VSname,
+		 FTstratification="Y",
+		 FTstratumName=pipo$FTstratname,
+		 FTnumberOfHauls=pipo$FOntot,
+		 FTdepartureDate=NA,
+		 FTarrivalDate=pipo$year,
+		 FTnumberTotal=pipo$FTntot,
+		 FTnumberSampled=pipo$FTnsamp,
+		 FTselectionMethod=pipo$FTsel,
+		 FTunitName=pipo$FTname,
+		 VSid=pipo$newVSid)
+  #VS
+  pipo<-tmp%>%transmute(newVSid,newSDid,VSname,VSstratname,VSntot,VSnsamp,VSsel)%>%distinct()
+  datrdb$VS<-datrdb$VS[rep(1,nrow(pipo)),]%>%
+	  mutate(VSid=pipo$newVSid,
+		 VSsequenceNumber=NA,
+		 VSencryptedVesselCode=pipo$VSname,
+		 VSstratification="Y",
+		 VSstratumName=pipo$VSstratname,
+		 VSnumberTotal=pipo$VSntot,
+		 VSnumberSampled=pipo$VSnsamp,
+		 VSselectionMethod=pipo$VSsel,
+		 VSunitName=pipo$VSname,
+		 SDid=pipo$newSDid)
+  #VD
+  pipo<-tmp%>%transmute(VSname,year)%>%distinct()
+  datrdb$VD<-datrdb$VD[rep(1,nrow(pipo)),]%>%
+	  mutate(VDid=pipo$VSname,
+		 VDyear=pipo$year,
+		 VDencryptedVesselCode=pipo$VSname,
+		 VDlengthCategory=NA)
+  #SD and SE
+  pipo<-tmp%>%select(newSDid,newDEid,year)%>%distinct()
+  datrdb$SD<-datrdb$SD[rep(1,nrow(pipo)),]%>%
+	  mutate(SDid=pipo$newSDid,
+		 SDinstitution="in silico",
+		 DEid=pipo$newDEid)
+  datrdb$DE<-datrdb$DE[rep(1,nrow(pipo)),]%>%
+	  mutate(DEid=pipo$newDEid,
+		 DEsamplingScheme="simulation census",
+		 DEsamplingSchemeType="census",
+		 DEyear=pipo$year)
+  #compute a population data data
+  cl<-datsim%>%group_by(year,gear,spp)%>%summarise(w=sum(wspp))%>%ungroup()
   clrdb<-cl%>%transmute(Clid=1:nrow(cl),
 	  CLrecType="CL", CLdTypSciWeig="Official",
 	  CLdSouSciWeig="Combination of official data",
@@ -278,15 +234,19 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 	  CLnatFishAct=NA, CLmetier6=cl$gear,
 	  CLIBmitiDev=NA, CLloc=NA,
 	  CLvesLenCat=NA, CLfishTech=NA,
-	  CLdeepSeaReg=NA, CLoffWeight=cl$value,
+	  CLdeepSeaReg=NA, CLoffWeight=cl$w,
 	  CLsciWeight=NA, CLexpDiff=NA,
 	  CLtotOffLanVal=NA, CLnumUniqVes=NA,
 	  CLsciLanRSE=NA, CLvalRSE=NA,
 	  CLsciLanQualBias=NA)
+  return(list(cl=data.frame(clrdb),samp=datrdb))
+}
+
+ rez<-sim2rdbes(datsim,datrdb)
 
   #save
-  saveRDS(datrdb,file="../outputs/datrdb.rds")
-  saveRDS(clrdb,file="../outputs/clrdb.rds")
+  saveRDS(rez$samp,file="../outputs/datrdbsimpop.rds")
+  saveRDS(rez$cl,file="../outputs/datclrdbsimpop.rds")
 
 
 
