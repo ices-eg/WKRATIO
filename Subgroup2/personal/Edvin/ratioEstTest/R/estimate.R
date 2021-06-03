@@ -48,7 +48,7 @@ numAtAgeSpeciesSelectionHT <- function(SA, sampleTotals){
   stopifnot(all(SA$SAstratification == "N"))
   stopifnot(all(!is.na(SA$SAspeciesCode)))
   stopifnot(length(unique(SA$SAspeciesCode)) == 1)
-  sa <- merge(SA[,c("SSid", "SAinclusionProb")], sampleTotals)
+  sa <- merge(SA[,c("SSid", "SAid", "SAinclusionProb")], sampleTotals)
   sa$weightedTotals <- (1/sa$SAinclusionProb) * sa$count
   return(stats::aggregate(list(total=sa$weightedTotals), by=list(SSid=sa$SSid, age=sa$age), FUN=sum, drop=F))
 }
@@ -135,11 +135,11 @@ ratio_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeight, paren
   stopifnot(parentIdname %in% names(sampleTable))
   stopifnot(all(sampleTable[[clusteringFlag]] == "N"))
 
-  sampleTable <- merge(sampleTable, numAtAge, by=sid)
-  sampleTable <- merge(sampleTable, totalWeight, by=sid)
+  numAtAge <- merge(sampleTable, numAtAge, by=sid)
+  totalWeight <- merge(sampleTable, totalWeight, by=sid)
 
-  strataTotalNumAtAge <- stats::aggregate(list(numAtAge=sampleTable$total), by=list(age=sampleTable$age, parent=sampleTable[[parentIdname]], stratum=sampleTable[[stratificationColumn]]), sum, drop=F)
-  strataWeight <- stats::aggregate(list(weight=sampleTable$weight), by=list(parent=sampleTable[[parentIdname]], stratum=sampleTable[[stratificationColumn]]), sum, drop=F)
+  strataTotalNumAtAge <- stats::aggregate(list(numAtAge=numAtAge$total), by=list(age=numAtAge$age, parent=numAtAge[[parentIdname]], stratum=numAtAge[[stratificationColumn]]), sum, drop=F)
+  strataWeight <- stats::aggregate(list(weight=totalWeight$weight), by=list(parent=totalWeight[[parentIdname]], stratum=totalWeight[[stratificationColumn]]), sum, drop=F)
 
   strataRatio <- merge(strataTotalNumAtAge, strataWeight)
   strataRatio$ratio <- strataRatio$numAtAge / strataRatio$weight
@@ -163,7 +163,7 @@ ratio_estimate_strata <- function(ratios, landings){
 
   land <- stats::aggregate(list(landedWeight=landings$CLofficialWeight), by=list(stratum=landings$stratum), sum)
   land <- merge(land, ratios)
-  land$numAtAge <- land$landedWeight * land$ratio
+  land$numAtAge <- (land$landedWeight*1000) * land$ratio
 
   return(land[,c("SDid", "stratum", "age", "numAtAge")])
 }

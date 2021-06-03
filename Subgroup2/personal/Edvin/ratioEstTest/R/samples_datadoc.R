@@ -6,8 +6,7 @@
 #' https://github.com/davidcurrie2001/MI_RDBES_ExchangeFiles/blob/d38b75fe6a902892943cf01100cdbb7e9b13c21a/ReadExchangeFileExample_WKRDBEST2.R
 #' and some fields like FO$SDid has been corrected afterwards.
 #'
-#' The data is not complete wrp non-response or missing obeservations.
-#' For instance the BV table lists selection methods as CENSUS for all entries, but some FishIds have no age.
+#' The parameter Age on the BV table is incorrectly labelled with selection methods CENSUS for all entries, This should be SRSWOR.
 #'
 #'
 #' @docType data

@@ -7,7 +7,7 @@ expect_true(all(c("SAid", "age", "count") %in% names(naa)))
 
 naa <- numAtAgeBV(samples$BV, 2,4)
 expect_equal(nrow(naa), 3*length(unique(samples$BV$SAid[samples$BV$BVtype=="Age"])))
-
+expect_equal(sum(naa$count), sum(samples$BV$BVvalue[samples$BV$BVtype=="Age"] %in% 2:4))
 
 
 samples$SA <- samples$SA[!is.na(samples$SA$SAtotalWeightLive),]
@@ -15,6 +15,7 @@ samples$SA <- samples$SA[samples$SA$SAstratification=="N",]
 samples <- fixInclusionProb(samples)
 context("Test numAtAgeSpeciesSelectionHT")
 ssTotals <- numAtAgeSpeciesSelectionHT(samples$SA, naa)
+
 context("Test numAtAgeHaulCensus")
 haulTotals <- numAtAgeHaulCensus(samples$SS, ssTotals)
 

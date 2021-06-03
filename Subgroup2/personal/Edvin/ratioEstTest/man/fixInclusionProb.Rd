@@ -4,16 +4,19 @@
 \alias{fixInclusionProb}
 \title{Estimates inclusion probabilities}
 \usage{
-fixInclusionProb(samples)
+fixInclusionProb(RDBESsamples)
 }
 \arguments{
-\item{samples}{RDBES data as exemplified in \code{\link{samples}}}
+\item{RDBESsamples}{RDBES data as exemplified in \code{\link{samples}}}
 }
 \value{
-samples with SAinclusionProb set
+RDBESsamples with SAinclusionProb set
 }
 \description{
-Estimates inclusion probabilities on SA table from catch weights and sample weights
+Estimates inclusion probabilities on SA table from catch weights and individual weights
+of age determined fish.
+In effect considers age sample fish as a SRSWOR selection from haul
+These inclusion probabilities may not be applicable for estimation with other parameters
 }
 \details{
 Halts with error of any SA entries are missing values for SAsampleWeightLive or SAtotalWeightLive

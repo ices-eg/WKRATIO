@@ -1,16 +1,28 @@
 #' Estimates inclusion probabilities
 #' @description
-#'  Estimates inclusion probabilities on SA table from catch weights and sample weights
+#'  Estimates inclusion probabilities on SA table from catch weights and individual weights
+#'  of age determined fish.
+#'  In effect considers age sample fish as a SRSWOR selection from haul
+#'  These inclusion probabilities may not be applicable for estimation with other parameters
 #' @details
 #'  Halts with error of any SA entries are missing values for SAsampleWeightLive or SAtotalWeightLive
-#' @param samples RDBES data as exemplified in \code{\link{samples}}
-#' @return samples with SAinclusionProb set
+#' @param RDBESsamples RDBES data as exemplified in \code{\link{samples}}
+#' @return RDBESsamples with SAinclusionProb set
 #' @export
-fixInclusionProb <- function(samples){
-  stopifnot(all(!is.na(samples$SA$SAsampleWeightLive)))
-  stopifnot(all(!is.na(samples$SA$SAtotalWeightLive)))
-  samples$SA$SAinclusionProb <- as.numeric(samples$SA$SAsampleWeightLive) / as.numeric(samples$SA$SAtotalWeightLive)
-  return(samples)
+fixInclusionProb <- function(RDBESsamples){
+
+  weights <- RDBESsamples$BV[RDBESsamples$BV$BVtype == "WeightLive",c("SAid", "BVfishId", "BVvalue")]
+  ages <- RDBESsamples$BV[RDBESsamples$BV$BVtype == "Age",c("SAid", "BVfishId")]
+  agedweights <- merge(ages, weights)
+  sampleWeights <- stats::aggregate(list(iWeight=as.numeric(agedweights$BVvalue)), by=list(SAid=agedweights$SAid), sum)
+  RDBESsamples$SA <- merge(RDBESsamples$SA, sampleWeights)
+  stopifnot(all(!is.na(RDBESsamples$SA$SAsampleWeightLive)))
+  stopifnot(all(!is.na(RDBESsamples$SA$SAtotalWeightLive)))
+  stopifnot(all(!is.na(RDBESsamples$SA$iWeight)))
+  RDBESsamples$SA$SAinclusionProb <- RDBESsamples$SA$iWeight / as.numeric(RDBESsamples$SA$SAtotalWeightLive)
+
+  RDBESsamples$SA$iWeight <- NULL
+  return(RDBESsamples)
 }
 
 #' Adds any strata missing from ratios table
