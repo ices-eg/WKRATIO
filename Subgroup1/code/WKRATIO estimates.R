@@ -1,5 +1,5 @@
 
-# uses RDBshare data and assumes simple random sampling within stages
+# uses RDBshare data and assumes simple random sampling within stages 
 # trips within domains (quarter & area) and ages within lengths.
 # Note that RDBshare is not actually set up in an accepted RDBES hierarchy. 
 # It is similar to H2, but with LE instead of FT

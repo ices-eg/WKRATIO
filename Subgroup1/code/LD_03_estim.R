@@ -40,11 +40,11 @@ npg<-readRDS("../outputs/datapopn.rds")%>%filter(year==1,value>0)%>%transmute(me
 						space="all",
 						spp,len,
 						n=value,type="ori")
-npgestim<-nsamp%>%transmute(metier,time,space,spp,len,n=100*npop,type="estim")
+npgestim<-nsamp%>%transmute(metier,time,space,spp,len,n=npop,type="estim")
 pipo<-rbind(npg,npgestim)
 ggplot(pipo,aes(x=len,y=n,color=type,group=type))+geom_path()+facet_wrap(metier~spp,scale="free")
 
-ggplot(pipo%>%filter(spp=="Dab"),aes(x=len,y=n,color=type,group=type))+geom_path()+facet_grid(metier~spp,scale="free")
+#ggplot(pipo%>%filter(spp=="Dab"),aes(x=len,y=n,color=type,group=type))+geom_path()+facet_grid(metier~spp,scale="free")
 ggplot(pipo%>%filter(spp=="Dab"),aes(x=len,y=n,color=type,group=type))+geom_path()+facet_wrap(~type,scale="free")
 
 

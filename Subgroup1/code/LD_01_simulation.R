@@ -121,20 +121,6 @@ npg0long<-data.frame(ftable(npg0))%>%
 	group_by(len,spp,year,gear)%>%summarise(value=sum(value,na.rm=T))%>%
 	ungroup()
 
-if(F){
-#add vessel and trip and fo artificially
-tr0<-npg0long%>%select(year,gear)%>%distinct()
-#n trip by gear
-ntrip<-5
-tr0<-tr0[rep(1:nrow(tr0),each=ntrip),]%>%mutate(idtrip=rep(1:nrow(tr0),each=ntrip))%>%
-	group_by(year,gear,idtrip)%>%mutate(prop=runif(ntrip))%>%mutate(prop=prop/sum(prop))%>%ungroup()
-pipo<-left_join(tr0,npg0long)%>%mutate(value2=value*prop)
-pipo1<-pipo1%>%group_by(
-
-sum(pipo$value2)
-sum(npg0long$value)
-table(npg0long$gear,npg0long$year)
-}
 
 
 ggplot(npg0long,aes(x=len,y=value,color=year,group=year))+geom_line()+facet_grid(spp~gear,scales="free")
@@ -203,14 +189,104 @@ saveRDS(datasamp,file="../outputs/datasimu.rds")
 saveRDS(cpg0long,file="../outputs/datapop.rds")
 saveRDS(npg0long,file="../outputs/datapopn.rds")
 
+#improvment: generating trrrrip for the whole pop and sampling theeeeeeem
+if(F){
+#npg0long,NS_params,n1=20,nbvess=data.frame(gear=c("Beam","Industrial","Otter","Pelagic"),nvess=c(4,2,4,3))
+#ntrip is 1:n1
+
+	#add vessel vessel trip proportionnal
+	tr0<-npg0long%>%select(year,gear)%>%distinct()
+	#generate a vessel population and related trip
+	nbvess<-data.frame(gear=c("Beam","Industrial","Otter","Pelagic"),nvess=c(4,2,4,3))
+	#generate up to 20 FO by gear and gear and up to max fo trip
+	nfo<- tr0%>%rowwise()%>%mutate(nfo=sample(1:20,1))%>%
+		mutate(ntrip=sample(1:nfo,1,replace=T))%>%
+		ungroup()%>%
+		left_join(nbvess)
+	#trip id + FO id
+	nfo<-nfo[rep(1:nrow(nfo),times=nfo$nfo),]%>%
+		group_by(year,gear,nfo)%>%
+		mutate(FOid=row_number())%>%ungroup()%>%
+		rowwise()%>%
+		mutate(TRid=sample(1:ntrip,1,replace=TRUE))%>%
+		group_by(year,gear,TRid)%>%
+		mutate(FOid=row_number())%>%ungroup()%>%
+		arrange(year,gear,TRid,FOid)%>%
+		ungroup()
+	#separate elaboration of vess id (unique by trip: trick for that)
+	nvesstmp<-nfo%>%select(year,gear,TRid,nvess)%>%distinct()%>%
+		rowwise()%>%mutate(VDid=sample(1:nvess,1,replace=T))%>%
+		ungroup()
+	nall<-nfo%>%left_join(nvesstmp)
+	#generate the prop of the catch taken by each FO
+	nall<-nall%>%group_by(year,gear)%>%mutate(prop=runif(nfo))%>%
+		mutate(prop=prop/sum(prop))%>%ungroup()
+	#pipo%>%group_by(year,gear)%>%summarise(tot=sum(prop))%>%filter(tot!=1)
+	npg0longsim<-left_join(nall,npg0long)%>%mutate(value=value*prop)%>%
+		filter(value>0)%>%select(-prop)
+	#check
+	pipo1<-npg0longsim%>%group_by(year,gear,len,spp)%>%summarise(value0=sum(value))%>%ungroup()
+	uu<-full_join(pipo1,npg0long)%>%filter(abs(value0-value)>1)
+	if(nrow(uu)>0){strop("pb trip prop")}
+
+	#npg0longsim%>%filter(year==1,gear=="Beam",FOid==1,TRid==1,VDid==1)
+	#add biological information
+	lwa<-data.frame(spp=NS_params@species_names,a=NS_params@W_a,b=NS_params@W_b,
+			Linf=NS_params@Linf,k=NS_params@k)
+	npg0longsim<-npg0longsim%>%left_join(lwa)
+	npg0longsim$wind<-npg0longsim$a*npg0longsim$len^npg0longsim$b
+	#add age
+	fct1<-function(t0=0,K,Linf,L){ max(1, ((-log(1 - L/Linf))/K + t0))}
+	npg0longsim<-npg0longsim%>%mutate(lentmp=ifelse(len>Linf,Linf-1e-1,len))%>%
+		rowwise()%>%
+		mutate(age=fct1(0,k,Linf,lentmp))%>%
+		ungroup()
+	#ggplot(npg0longsim,aes(x=len,y=age,group=spp,color=spp))+geom_point()
+	#add to w by spp
+	npg0longsim<-npg0longsim%>%mutate(wspp=value*wind)
+	#clean the data
+	npg0longsim<-npg0longsim%>%transmute(year,gear,nfo,ntrip,nvess,FOid,TRid,VDid,spp,len,age,
+					  n=value,wind,wspp)
 
 
-#a simple random samples of 
+	#sampling scheme
+	#nb vessel, nbtrip ,n FO and prop sampled
+	nplanVD<-2;nplanTR<-1;nplanFO<-seq(1,max(npg0longsim$nfo),2);
+	nplanSPP<-15;planprop<-0.1
+	#sample space 
+	sampspace<-npg0longsim%>%select(year,gear,FOid,TRid,VDid)%>%
+		distinct()
+	#random sampling of 2 vessels by strata
+	sampVD<-sampspace%>%select(year,gear,VDid)%>%
+		distinct()%>%
+		group_by(year,gear)%>%
+		slice_sample(n=nplanVD,replace=F)%>%
+		ungroup()%>%
+		mutate(VDsamp=TRUE)
+	sampspace<-left_join(sampspace,sampVD)%>%mutate(VDsamp=ifelse(is.na(VDsamp),F,VDsamp))
+	#weighted random sampling of 1 trip by vessels by strata (aka the vessel
+	#with the more trip are highest proba of selection)
+	sampTR<-sampspace%>%filter(VDsamp==T)%>%select(year,gear,VDid,TRid)%>%
+		distinct()%>%
+		group_by(year,gear,VDid)%>%mutate(nbtrip=n_distinct(TRid))%>%
+		group_by(year,gear,VDid)%>%
+		slice_sample(n=nplanTR,weight_by=nbtrip,replace=F)%>%
+		ungroup()%>%
+		mutate(TRsamp=TRUE)%>%
+		select(-nbtrip)
+	sampspace<-left_join(sampspace,sampTR)%>%mutate(TRsamp=ifelse(is.na(TRsamp),F,TRsamp))
+	#take one FO on 3
+	sampspace<-sampspace%>%
+		mutate(FOsamp=VDsamp&TRsamp&FOid%in%nplanFO)
+	#plan to sample 10% of the catch
+	sampspace<-sampspace%>%
+		mutate(propsamp=ifelse(FOsamp,planprop,0))
+	#add the sampling plan to npglon
+	npg0longsim<-left_join(npg0longsim,sampspace)
+
+	#https://humanitarian-user-group.github.io/post/tidysampling/
+	saveRDS(npg0longsim,file="../outputs/datasimu2.rds")
 
 
+}
 
-
-
-#all.equal(apply((pipo[,10,1,1:4]),1,sum),model_run@N[,10,2])
-#all.equal(apply((pipo[,10,100,1:4]),1,sum),model_run@N[,10,101])
-#translate npg0 in yearly data
