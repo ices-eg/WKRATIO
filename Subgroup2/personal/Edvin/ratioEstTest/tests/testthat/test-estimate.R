@@ -1,0 +1,58 @@
+data(samples)
+
+context("Test numAtAgeBV")
+naa <- numAtAgeBV(samples$BV)
+expect_equal(ncol(naa), 3)
+expect_true(all(c("SAid", "age", "count") %in% names(naa)))
+
+naa <- numAtAgeBV(samples$BV, 2,4)
+expect_equal(nrow(naa), 3*length(unique(samples$BV$SAid[samples$BV$BVtype=="Age"])))
+
+
+
+samples$SA <- samples$SA[!is.na(samples$SA$SAtotalWeightLive),]
+samples$SA <- samples$SA[samples$SA$SAstratification=="N",]
+samples <- fixInclusionProb(samples)
+context("Test numAtAgeSpeciesSelectionHT")
+ssTotals <- numAtAgeSpeciesSelectionHT(samples$SA, naa)
+context("Test numAtAgeHaulCensus")
+haulTotals <- numAtAgeHaulCensus(samples$SS, ssTotals)
+
+context("Test totalWeightSpeciesSelection")
+ssWeight <- totalWeightSpeciesSelection(samples$SA)
+context("Test totalWeightHaulHT")
+haulWeight <- totalWeightHaulHT(samples$SS, ssWeight)
+
+context("Test ratio_wo_N")
+ratios <- ratio_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
+
+land <- landings$CL
+land$stratum <- "U"
+
+context("Test ratio_estimate_strata")
+est <- ratio_estimate_strata(ratios, land)
+
+context("Test total_stratified")
+total <- total_stratified(est)
+
+
+context("Test stratfied ratio estimate")
+fos <- samples$FO
+fos$FOstratification = "Y"
+fos$FOstratumName[1:10] <- "s1"
+fos$FOstratumName[10:nrow(fos)] <- "s2"
+ratios <- ratio_wo_N("FO", fos, haulTotals, haulWeight, "SDid")
+land <- landings$CL
+land$stratum <- "s1"
+land$stratum[1:300] <- "s2"
+
+est <- ratio_estimate_strata(ratios, land)
+totalS <- total_stratified(est)
+
+ratios <- rbind(ratios, ratios[1:2,])
+ratios$SDid[1:2] <- 2
+est <- ratio_estimate_strata(ratios, land)
+
+expect_error(total_stratified(est))
+
+
