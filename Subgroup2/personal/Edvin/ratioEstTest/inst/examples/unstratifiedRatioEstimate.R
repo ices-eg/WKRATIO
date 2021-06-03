@@ -31,5 +31,5 @@ est <- ratio_estimate_strata(ratios, landingsData)
 # design-based stuff again
 #
 total <- total_stratified(est)
+
 plotNumAtAge(total)
-sum(landingsData$CLofficialWeight) / sum(total$numAtAge)
