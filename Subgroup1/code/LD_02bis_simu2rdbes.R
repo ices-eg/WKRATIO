@@ -67,7 +67,8 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 	  group_by(year,gear,FOid,TRid,VDid)%>%
 	  mutate(newSSid=cur_group_id(),
 		 SSntot=n_distinct(spp),SSnsamp=n_distinct(spp),
-		 SSsel="Census",SSname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+		 #SSsel="Census",SSname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+		 SSsel="Census",SSname=paste0(year,gear))%>%#ungroup()
 	  #FO
 	  group_by(year,gear,FOid,TRid,VDid)%>%
 	  mutate(newFOid=cur_group_id())%>%
@@ -170,6 +171,7 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 		 FOnumberSampled=pipo$FOnsamp,
 		 FOnumberTotal=pipo$FOntot,
 		 FOselectionMethod=pipo$FOsel,
+		 FOunitName=pipo$FOname,
 		 FTid=pipo$newFTid)
   #FT
   pipo<-tmp%>%transmute(newFTid,newVSid,gear,year,FTntot,FTnsamp,FTstratname,FTname,FTsel,VSname,FOntot)%>%distinct()
