@@ -154,6 +154,7 @@ ratio_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeight, paren
 #'  Haults with error if 'SDid' is not a column of 'ratios'
 #'  Haults with error of 'stratum' is not a column of 'landings'
 #'  Haults with error if ratios are not provided for all strata or if ratios are provided for strata not in cencus ('landings')
+#'  Haults with error if there are more than one species code in the landings
 #' @param ratios data.frame with columns SDid (int), stratum (chr), age (int), ratio (num)
 #' @param landings CL table with the column 'stratum' added
 #' @return data.frame with columns SDid (int), stratum (chr), age (int), numAtAge (num)
@@ -164,6 +165,7 @@ ratio_estimate_strata <- function(ratios, landings){
   stopifnot("stratum" %in% names(landings))
   stopifnot(all(landings$stratum %in% ratios$stratum))
   stopifnot(all(ratios$stratum %in% landings$stratum))
+  stopifnot(length(unique(landings$CLspeciesCode))==1)
 
   land <- stats::aggregate(list(landedWeight=landings$CLofficialWeight), by=list(stratum=landings$stratum), sum)
   land <- merge(land, ratios)
@@ -242,6 +244,7 @@ ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeig
 #'  Haults with error if 'SDid' is not a column of 'ratios'
 #'  Haults with error of 'stratum' is not a column of 'landings'
 #'  Haults with error if ratios are not provided for all strata or if ratios are provided for strata not in cencus ('landings')
+#'  Haults with error if there are more than one species code in the landings
 #' @param ratio_variances variance of ratios data.frame with columns SDid (int), stratum (chr), age (int), variance (num)
 #' @param landings CL table with the column 'stratum' added
 #' @return ratio_variances with variance replaced with the variance for the strata total
@@ -252,6 +255,7 @@ ratio_variance_strata <- function(ratio_variances, landings){
   stopifnot("stratum" %in% names(landings))
   stopifnot(all(landings$stratum %in% ratio_variances$stratum))
   stopifnot(all(ratio_variances$stratum %in% landings$stratum))
+  stopifnot(length(unique(landings$CLspeciesCode))==1)
 
   land <- stats::aggregate(list(weight=landings$CLofficialWeight), by=list(stratum=landings$stratum), sum)
 

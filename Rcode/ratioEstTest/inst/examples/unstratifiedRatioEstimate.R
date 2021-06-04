@@ -2,6 +2,8 @@ library(ratioEstTest)
 
 sampleData <- samples
 landingsData <- landings$CL
+landingsData <- landingsData[landingsData$CLspeciesFaoCode == "MAC",]
+
 
 #
 # preprosessing

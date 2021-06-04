@@ -28,6 +28,7 @@ context("Test ratio_wo_N")
 ratios <- ratio_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
 
 land <- landings$CL
+land <- land[land$CLspeciesFaoCode == "MAC",]
 land$stratum <- "U"
 
 context("Test ratio_estimate_strata")
@@ -57,6 +58,7 @@ fos$FOstratumName[1:10] <- "s1"
 fos$FOstratumName[10:nrow(fos)] <- "s2"
 ratios <- ratio_wo_N("FO", fos, haulTotals, haulWeight, "SDid")
 land <- landings$CL
+land <- land[land$CLspeciesFaoCode == "MAC",]
 land$stratum <- "s1"
 land$stratum[1:300] <- "s2"
 
