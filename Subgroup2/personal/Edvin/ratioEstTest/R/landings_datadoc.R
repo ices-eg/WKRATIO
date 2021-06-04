@@ -1,3 +1,5 @@
+#' Landings example
+#'
 #' Example data - Norwegian landings of Mackerell and Blue Whithing 2019 in RDBES format
 #' Data was obtained from RDBES format as of the 2020 test data called.
 #' The exchange format was parsed with the parser at:

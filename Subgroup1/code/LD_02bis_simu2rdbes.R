@@ -48,62 +48,84 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
   #use simudat to populate datrdb for all the year ?
   datsim<-readRDS("../outputs/datasimu2.rds")
 
-  #a function to translate simulation data into RDBES data
 
- sim2rdbes<-function(datsim,datrdb){
-  #prep data for rdbes
+#a function to prepare datsim computing primary key and sample tot for datsim
+# first step{{{
+ sim2prepsim<-function(datsim,selec){
+	 if(F){
+	 selection<-datsim$FOsamp&datsim$SPPsamp
+	 }
+datsim$selec<-selec
   #prep pk and parameters inside the datsim object
   tmp<-datsim%>%
 	  #FM
 	  group_by(year,gear,FOid,TRid,VDid,spp,len)%>%
 	  mutate(newFMid=cur_group_id())%>%ungroup()%>%
   	  #SA
+	  mutate(Xwspp=ifelse(selec,wspp,NA),
+		 Xspp=ifelse(selec,spp,NA))%>%
 	  group_by(year,gear,FOid,TRid,VDid,spp)%>%
 	  mutate(newSAid=cur_group_id(),
-		 SAwtot=sum(wspp),SAwsamp=sum(wspp),
-		 SAntot=n_distinct(len),SAnsamp=n_distinct(len),
-		 SAsel="Census",SAname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+		 SAwtot=sum(wspp),SAwsamp=sum(Xwspp,na.rm=T),
+		 SAntot=n_distinct(spp),SAnsamp=n_distinct(Xspp,na.rm=T),
+		 SAsel="Census",SAname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%
+	  ungroup()%>% select(-Xwspp,-Xspp)%>%
 	  #SS
 	  group_by(year,gear,FOid,TRid,VDid)%>%
+	  mutate( Xspp=ifelse(selec,spp,NA))%>%
 	  mutate(newSSid=cur_group_id(),
-		 SSntot=n_distinct(spp),SSnsamp=n_distinct(spp),
-		 SSsel="Census",SSname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+		 SSntot=n_distinct(spp,na.rm=T),SSnsamp=n_distinct(Xspp,na.rm=T),
+		 #SSsel="Census",SSname=paste(year,gear,VDid,TRid,FOid,spp,sep="_"))%>%#ungroup()
+		 SSsel="Census",SSname=paste0(year,gear))%>%
+	  ungroup()%>% select(-Xspp)%>%
 	  #FO
+	  mutate(XFOid=ifelse(selec,FOid,NA))%>%
 	  group_by(year,gear,FOid,TRid,VDid)%>%
 	  mutate(newFOid=cur_group_id())%>%
 	  group_by(year,gear,TRid,VDid)%>%
-	  mutate(FOntot=n_distinct(FOid),FOnsamp=n_distinct(FOid))%>%ungroup()%>%
+	  mutate(FOntot=n_distinct(FOid,na.rm=T),FOnsamp=n_distinct(XFOid,na.rm=T))%>%ungroup()%>%
 	  mutate(FOsel="Census",FOname=paste(year,gear,VDid,TRid,FOid,sep="_"),
-		 FOstratname=paste(year,gear,VDid,TRid,sep="_"))%>%#ungroup()
+		 FOstratname=paste(year,gear,VDid,TRid,sep="_"))%>%
+	  ungroup()%>%select(-XFOid)%>%
 	  #FT
+	  mutate(XTRid=ifelse(selec,TRid,NA))%>%
 	  group_by(year,gear,TRid,VDid)%>%
 	  mutate(newFTid=cur_group_id())%>%
 	  group_by(year,gear,VDid)%>%
-	  mutate(FTntot=n_distinct(TRid),FTnsamp=n_distinct(TRid))%>%ungroup()%>%
+	  mutate(FTntot=n_distinct(TRid,na.rm=T),
+		 FTnsamp=n_distinct(XTRid,na.rm=T))%>%ungroup()%>%
 	  mutate(FTsel="Census",FTname=paste(year,gear,VDid,TRid,sep="_"),
-		 FTstratname=paste(year,gear,VDid,sep="_"))%>%#ungroup()
+		 FTstratname=paste(year,gear,VDid,sep="_"))%>%
+	  ungroup()%>%select(-XTRid)%>%
 	  #VS
+	  mutate(XVDid=ifelse(selec,VDid,NA))%>%
 	  group_by(year,gear,VDid)%>%
 	  mutate(newVSid=cur_group_id())%>%
 	  group_by(year,gear)%>%
-	  mutate(VSntot=n_distinct(VDid),VSnsamp=n_distinct(VDid))%>%ungroup()%>%
+	  mutate(VSntot=n_distinct(VDid,na.rm=T),VSnsamp=n_distinct(XVDid,na.rm=T))%>%ungroup()%>%
 	  mutate(VSsel="Census",VSname=paste(year,gear,VDid,sep="_"),
-		 VSstratname=paste(year,gear,sep="_"))%>%#ungroup()
+		 VSstratname=paste(year,gear,sep="_"))%>%
+	  ungroup()%>%select(-XVDid)%>%
 	  #SD & DE
 	  group_by(year)%>%
 	  mutate(newSDid=cur_group_id(),newDEid=cur_group_id())%>%
 	  ungroup()
-  if(F){
-	  tmp%>%select(year,gear,FOid,TRid,VDid,spp,#len,
-		       #newFMid,
-		       #newSAid,SAntot,SAnsamp,SAname,
-		       newSSid,SSntot,SSnsamp,SSname,
-		       newFOid,FOntot,FOnsamp,FOname,FOstratname,
-		       newFTid,FTntot,FTnsamp,FTname,FTstratname,
-		       newVSid,VSntot,VSnsamp,VSname,VSstratname
-		       )%>%distinct()%>%
-		  head(1000)%>%View
+	  #tmp%>%
+	#	  mutate(pk=paste(year,gear))%>%
+	#	  group_by(pk,newVSid,VSntot,VSnsamp)%>%
+	#	  summarise(SPPsamp=any(SPPsamp),FOsamp=any(FOsamp))%>%
+	#	  ungroup()%>%arrange(pk,newVSid)%>%View
+  	return(tmp)
   }
+#}}}
+
+#convert prepared simdat to rdbes
+prepsim2rdbes<-function(datsim,datrdb,selec){#{{{
+	if(F){
+		tmp<-datsim
+		selec<-datsim$FOsamp&datsim$SPPsamp
+	}
+  tmp<-datsim[selec,]
   #FM
   pipo<-tmp%>%transmute(newFMid,len,n,newSAid)%>%distinct()
   datrdb$FM<-datrdb$FM[rep(1,nrow(pipo)),]%>%
@@ -170,6 +192,7 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 		 FOnumberSampled=pipo$FOnsamp,
 		 FOnumberTotal=pipo$FOntot,
 		 FOselectionMethod=pipo$FOsel,
+		 FOunitName=pipo$FOname,
 		 FTid=pipo$newFTid)
   #FT
   pipo<-tmp%>%transmute(newFTid,newVSid,gear,year,FTntot,FTnsamp,FTstratname,FTname,FTsel,VSname,FOntot)%>%distinct()
@@ -240,14 +263,21 @@ allRequiredTables <- getTablesInHierarchies(downloadFromGitHub = FALSE, fileLoca
 	  CLsciLanRSE=NA, CLvalRSE=NA,
 	  CLsciLanQualBias=NA)
   return(list(cl=data.frame(clrdb),samp=datrdb))
-}
+}#}}}
 
- rez<-sim2rdbes(datsim,datrdb)
 
-  #save
-  saveRDS(rez$samp,file="../outputs/datrdbsimpop.rds")
-  saveRDS(rez$cl,file="../outputs/datclrdbsimpop.rds")
+#pop data rdbes
+rezpop<-sim2prepsim(datsim,rep(T,nrow(datsim)))
+rezpop<-prepsim2rdbes(rezpop,datrdb,rep(T,nrow(rezpop)))
+saveRDS(rezpop$samp,file="../outputs/datrdbsimpop.rds")
+saveRDS(rezpop$cl,file="../outputs/datclrdbsim.rds")
 
+#sim data rdbes
+rezsamp<-sim2prepsim(datsim,datsim$FOsamp&datsim$SPPsamp)
+
+#rezsamp%>%select(FOsamp,SPPsamp,propsamp,newFOid,newSAid,spp)%>%View()
+rezsamp<-prepsim2rdbes(rezsamp,datrdb,datsim$FOsamp&datsim$SPPsamp)
+saveRDS(rezsamp$samp,file="../outputs/datrdbsimsamp.rds")
 
 
 
