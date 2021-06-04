@@ -190,7 +190,6 @@ saveRDS(cpg0long,file="../outputs/datapop.rds")
 saveRDS(npg0long,file="../outputs/datapopn.rds")
 
 #improvment: generating trrrrip for the whole pop and sampling theeeeeeem
-if(F){
 #npg0long,NS_params,n1=20,nbvess=data.frame(gear=c("Beam","Industrial","Otter","Pelagic"),nvess=c(4,2,4,3))
 #ntrip is 1:n1
 
@@ -224,11 +223,23 @@ if(F){
 	#pipo%>%group_by(year,gear)%>%summarise(tot=sum(prop))%>%filter(tot!=1)
 	npg0longsim<-left_join(nall,npg0long)%>%mutate(value=value*prop)%>%
 		filter(value>0)%>%select(-prop)
+	#add nspp tot
+	npg0longsim<-npg0longsim%>%
+		group_by(year,gear,FOid,TRid,VDid)%>%
+		mutate(nspp=n_distinct(spp))%>%
+		group_by(year,gear,TRid,VDid)%>%
+		mutate(nfo=n_distinct(FOid))%>%
+		group_by(year,gear,VDid)%>%
+		mutate(ntrip=n_distinct(TRid))%>%
+		group_by(year,gear)%>%
+		mutate(nvess=n_distinct(VDid))%>%
+		ungroup()
+
+
 	#check
 	pipo1<-npg0longsim%>%group_by(year,gear,len,spp)%>%summarise(value0=sum(value))%>%ungroup()
 	uu<-full_join(pipo1,npg0long)%>%filter(abs(value0-value)>1)
 	if(nrow(uu)>0){strop("pb trip prop")}
-
 	#npg0longsim%>%filter(year==1,gear=="Beam",FOid==1,TRid==1,VDid==1)
 	#add biological information
 	lwa<-data.frame(spp=NS_params@species_names,a=NS_params@W_a,b=NS_params@W_b,
@@ -245,16 +256,14 @@ if(F){
 	#add to w by spp
 	npg0longsim<-npg0longsim%>%mutate(wspp=value*wind)
 	#clean the data
-	npg0longsim<-npg0longsim%>%transmute(year,gear,nfo,ntrip,nvess,FOid,TRid,VDid,spp,len,age,
+	npg0longsim<-npg0longsim%>%transmute(year,gear,nspp,nfo,ntrip,nvess,FOid,TRid,VDid,spp,len,age,
 					  n=value,wind,wspp)
-
-
 	#sampling scheme
 	#nb vessel, nbtrip ,n FO and prop sampled
 	nplanVD<-2;nplanTR<-1;nplanFO<-seq(1,max(npg0longsim$nfo),2);
 	nplanSPP<-15;planprop<-0.1
 	#sample space 
-	sampspace<-npg0longsim%>%select(year,gear,FOid,TRid,VDid)%>%
+	sampspace<-npg0longsim%>%select(year,gear,spp,FOid,TRid,VDid)%>%
 		distinct()
 	#random sampling of 2 vessels by strata
 	sampVD<-sampspace%>%select(year,gear,VDid)%>%
@@ -281,12 +290,45 @@ if(F){
 	#plan to sample 10% of the catch
 	sampspace<-sampspace%>%
 		mutate(propsamp=ifelse(FOsamp,planprop,0))
+	#take n species over the whole species there
+	sampSPP<-sampspace%>%filter(VDsamp==T&TRsamp&FOsamp==T)%>%select(year,gear,VDid,TRid,FOid,spp)%>%
+		distinct()%>%
+		group_by(year,gear,VDid,TRid,FOid)%>%mutate(nbspp=n_distinct(spp))%>%
+		group_by(year,gear,VDid,TRid,FOid)%>%
+		slice_sample(n=nplanSPP,replace=F)%>%
+		ungroup()%>%
+		mutate(SPPsamp=TRUE)%>%
+		select(-nbspp)
+	#sampSPP%>%filter(year==1,gear=="Beam")
+	#merge
+	sampspace<-left_join(sampspace,sampSPP)%>%mutate(SPPsamp=ifelse(is.na(SPPsamp),F,SPPsamp))
+
 	#add the sampling plan to npglon
 	npg0longsim<-left_join(npg0longsim,sampspace)
+	#compute subtotal for some parameters
+	npg0longsim<-npg0longsim%>%
+		group_by(year,gear,FOid,TRid,VDid)%>%
+		mutate(wFO=sum(wspp))%>%
+		group_by(year,gear,TRid,VDid)%>%
+		mutate(wTR=sum(wspp))%>%
+		group_by(year,gear,VDid)%>%
+		mutate(wVD=sum(wspp))%>%
+		ungroup()
+	#check
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(wVD)%>%unique()%>%pull
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(TRid,wTR)%>%distinct()%>%pull(wTR)%>%sum()
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(FOid,wFO)%>%distinct()%>%pull(wFO)%>%sum()
+	#sum(npg0longsim$wspp)
+	#npg0longsim%>%select(gear,year,VDid,wVD)%>%distinct()%>%pull(wVD)%>%sum()
+	#npg0longsim%>%select(gear,year,VDid,TRid,wTR)%>%distinct()%>%pull(wTR)%>%sum()
+	npg0longsim%>%group_by(year,gear,nfo,ntrip,nvess,FOid,TRid,VDid)%>%summarise(nbfo=n_distinct(FOid))
+
+	stop("ici")
+	npg0longsim%>%select(year,gear,VDid,TRid,FOid,nspp,nfo,ntrip,nvess)%>%arrange(year,gear,VDid,TRid,FOid)%>%distinct()
+
 
 	#https://humanitarian-user-group.github.io/post/tidysampling/
 	saveRDS(npg0longsim,file="../outputs/datasimu2.rds")
 
 
-}
 
