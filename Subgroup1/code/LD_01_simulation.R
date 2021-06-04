@@ -38,6 +38,9 @@ colnames(effort_mat) <- c("Industrial", "Otter", "Beam", "Pelagic")
 model_run <- run_LeMans(params=NS_params, N0=model_run@N[,,501], years=50, effort=effort_mat)
 plot_SSB(inputs=NS_params,outputs=model_run,full_plot_only=T)
 plot_biomass(inputs=NS_params,outputs=model_run,full_plot_only=T)
+png("rezbiomass.png")
+plot_biomass(inputs=NS_params,outputs=model_run,full_plot_only=T)
+dev.off()
 
 #plot_indicators(inputs=NS_params,outputs=model_run)
 #get catch per gear dim i species j gear k timestep
@@ -64,7 +67,9 @@ cpg0long<-data.frame(ftable(cpg0))%>%
 		  value=Freq)%>%
 	group_by(spp,year,gear)%>%summarise(value=sum(value,na.rm=T))%>%
 	ungroup()
+png("rezcatch.png")
 ggplot(cpg0long,aes(x=year,y=value,color=spp))+geom_line()+facet_wrap(~gear)
+dev.off()
 
 #get number at len by gear
 get_NPG<-function(Catch,Qs,effort,years=nrow(effort),phi_min=0.1){
@@ -124,6 +129,7 @@ npg0long<-data.frame(ftable(npg0))%>%
 
 
 ggplot(npg0long,aes(x=len,y=value,color=year,group=year))+geom_line()+facet_grid(spp~gear,scales="free")
+ggsave("reznlenpop.png")
 
 #simulate a sampling plan stratified by the total catch of the gear over one
 #year 
