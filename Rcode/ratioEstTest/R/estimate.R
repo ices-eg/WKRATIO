@@ -229,6 +229,8 @@ ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeig
   varPrStratum$variance <- varPrStratum$variance * (varPrStratum$sSize / (varPrStratum$sSize-1)) * fpc
   names(varPrStratum)[1] <- parentIdname
 
+  varPrStratum$variance[varPrStratum$sSize < 2] <- NA
+
   # Eq. 7.19
   mw <- sum(totalWeight$weight)
   varPrStratum$variance <- varPrStratum$variance / (mw**2)

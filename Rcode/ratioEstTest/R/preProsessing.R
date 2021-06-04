@@ -59,3 +59,86 @@ imputeRatios <- function(ratios, map){
   }
   return(ratios)
 }
+
+#' Median ratio imputation
+#' @description
+#'  Assign to unsampled strata the median ratio of that age groupof other strata
+#' @param ratio data.frame with columns SDid (int), stratum (chr), age (int), ratio (num)
+#' @return 'ratio' with ratios for unsampled strata imputed
+#' @export
+medianRatioImputation <- function(ratio){
+  medianR <- stats::aggregate(list(median=ratio$ratio), by=list(age=ratio$age), FUN=function(x){stats::median(x, na.rm=T)})
+
+  medianR$SDid <- max(ratio$SDid, na.rm=T) + 1
+  ratio$SDid[is.na(ratio$SDid)] <- max(ratio$SDid, na.rm=T) + 1
+  newR <- merge(ratio, medianR, all=T)
+  stopifnot(nrow(newR) == nrow(ratio))
+  newR$ratio[is.na(newR$ratio)] <- newR$median[is.na(newR$ratio)]
+  newR$median <- NULL
+
+  return(newR)
+}
+
+#' Max variance imputation
+#' @description
+#'  Assign to unsampled strata the maximal variance among the sampled strata
+#' @param ratio_var data.frame with columns SDid (int), stratum (chr), age (int), variance (num)
+#' @return 'ratio_var' with ratios for unsampled strata imputed
+#' @export
+maxVarianceImputation <- function(ratio_var){
+  maxV <- stats::aggregate(list(maxVar=ratio_var$variance), by=list(age=ratio_var$age), FUN=function(x){max(x, na.rm=T)})
+
+  maxV$SDid <- max(ratio_var$SDid, na.rm=T) + 1
+  ratio_var$SDid[is.na(ratio_var$SDid) | is.na(ratio_var$variance)] <- max(ratio_var$SDid, na.rm=T) + 1
+
+  newVar <- merge(ratio_var, maxV, all=T)
+  stopifnot(nrow(newVar) == nrow(ratio_var))
+  newVar$variance[is.na(newVar$variance)] <- newVar$maxVar[is.na(newVar$variance)]
+  newVar$maxVar <- NULL
+
+  return(newVar)
+}
+
+#' Annotate post-stratification landings
+#' @description
+#'  Applies a post-stratification scheme that matches the one produced by \code{\link{postStratifyMacPelSamples}}
+#' @param landings CL table
+#' @return 'landings' with the column 'stratum' added
+#' @export
+postStratifyMacPelLandings <- function(landings){
+  gear <- unlist(lapply(landings$CLmetier6, FUN=function(x){unlist(strsplit(x, "_"))[[1]]}))
+  stopifnot(all(!is.na(gear)))
+
+  stopifnot(all(!is.na(landings$CLquarter)))
+  quarter <- paste("Q", landings$CLquarter, sep="")
+
+  stopifnot(all(!is.na(landings$CLarea)))
+  area <- landings$CLarea
+
+  landings$stratum <- paste(gear, quarter, area, sep="/")
+
+  return(landings)
+}
+
+#' Annotate post-stratification samples
+#' @description
+#'  Applies a post-stratification scheme that matches the one produced by \code{\link{postStratifyMacPelLandings}}
+#' @param samples RDBES samples
+#' @return 'samples' with the columns 'FOstratification' and 'FOstratumName' altered
+#' @export
+postStratifyMacPelSamples <- function(samples){
+
+  stopifnot(all(!is.na(samples$FO$FOgear)))
+  gear <- samples$FO$FOgear
+
+  stopifnot(all(!is.na(samples$FO$FOstartDate)))
+  quarter <- quarters(as.POSIXct(samples$FO$FOstartDate))
+
+  stopifnot(all(!is.na(samples$FO$FOarea)))
+  area <- samples$FO$FOarea
+
+  samples$FO$FOstratumName <- paste(gear, quarter, area, sep="/")
+  samples$FO$FOstratification <- "Y"
+
+  return(samples)
+}

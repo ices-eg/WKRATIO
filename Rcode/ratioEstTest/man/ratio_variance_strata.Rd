@@ -21,4 +21,5 @@ Estimates variance for totals in strata estimated by ratio estimator.
 Haults with error if 'SDid' is not a column of 'ratios'
 Haults with error of 'stratum' is not a column of 'landings'
 Haults with error if ratios are not provided for all strata or if ratios are provided for strata not in cencus ('landings')
+Haults with error if there are more than one species code in the landings
 }

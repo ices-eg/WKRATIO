@@ -5,8 +5,8 @@ Version: 0.1.0
 Author: Edvin Fuglebakk
 Maintainer: Edvin Fuglebakk <Edvin.Fuglebakk@hi.no>
 Description: Testing ratio estimation with RDBES.
- Prototypes various methods to support ratio estimation
- Examples of applications are stored in inst/examples
+    Prototypes various methods to support ratio estimation.
+    Examples of applications are stored in inst/examples.
 License: LGPL
 Encoding: UTF-8
 LazyData: true
@@ -16,4 +16,5 @@ Suggests:
     testthat (>= 2.1.0)
 Imports: 
     sp,
-    ggplot2
+    ggplot2,
+    scales

@@ -15,3 +15,12 @@ context("Test imputeRatios")
 imputedRatios <- imputeRatios(ratios, list(SDN_DEF="OTB_SPF", MIS_MIS="PS_SPF"))
 expect_equal(imputedRatios$ratio[imputedRatios$stratum=="SDN_DEF"], imputedRatios$ratio[imputedRatios$stratum=="OTB_SPF"])
 
+context("Test postStratifyMacPelLandings")
+ll <- landings$CL
+ll <- postStratifyMacPelLandings(ll)
+
+sa <- samples
+sa <- postStratifyMacPelSamples(sa)
+
+expect_true(all(sa$FO$FOstratumName %in% ll$stratum))
+
