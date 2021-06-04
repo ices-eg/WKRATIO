@@ -7,6 +7,11 @@ datsim<-readRDS("../outputs/datasimu2.rds")
 clrdb<-readRDS("../outputs/datclrdbsimpop.rds")
 datrdbpop<-readRDS("../outputs/datrdbsimpop.rds")
 datrdbsamp<-readRDS("../outputs/datrdbsimsamp.rds")
+
+#try something about the 10% sampling weight
+#datrdbsamp$SA$SAnumberTotal<-datrdbsamp$SA$SAnumberTotal*10
+
+
 fct1<-function(dat){
 	#dat<-datrdbpop
 	pipo<-left_join(dat$FM,dat$SA)%>%
@@ -68,24 +73,21 @@ ggplot(rbind(tmp1,tmp2), aes(x=len,y=n,group=ori,color=ori))+
 		}
 		return(b)
 	}
-	#some testing
-	pipo<-doincp(datrdbpop$FT,"FTinclusionProb")
-	pipo<-doincp(datrdbpop$FO,"FOinclusionProb")
-
-
-	#datrdbpop<-mapply(doincp,datrdbpop,
+	#inclusion proba for pop H1
 	datrdbpop<-mapply(doincp,datrdbpop,
 		     paste0(names(datrdbpop),"inclusionProb"),
 		     SIMPLIFY=FALSE)
-	#
+	#inclustion proba for samp H1
+	datrdbsamp<-mapply(doincp,datrdbsamp,
+		     paste0(names(datrdbsamp),"inclusionProb"),
+		     SIMPLIFY=FALSE)
+	#datrdbsamp$SA$SAinclusionProb<-datrdbsamp$SA$SAinclusionProb/10
 
 # -----------------------------------------------------------------------
 # a function to calculate inclusion probabilities for the units at the final stage
 # of sampling given all the inclusion probabilities for the other stages
 # -----------------------------------------------------------------------
-getIncProb <- function(RDB,stages){
-	RDB<-datrdbpop
-	stages<-stages
+getIncProb <- function(RDB,stages){#{{{
   nStages <- length(stages)
   if (any(stages %in% c("FM"))) {
     RDB[["FM"]][["FMinclusionProb"]] <- 1
@@ -98,13 +100,20 @@ getIncProb <- function(RDB,stages){
     RDB[[stages[[i]]]][["inclusionProb"]] <- RDB[[stages[[i]]]][["inclusionProbPrev"]]*RDB[[stages[[i]]]][[paste(stages[[i]],"inclusionProb",sep="")]]
   }
   return(RDB)
-}
+}#}}}
 
-#calcul incprob
+#calcul incprob for H1 pop
 stages<-list("VS","FT","FO","SS","SA","FM")
 datrdbpop<-getIncProb(datrdbpop,stages)
+#calcul incprob for H1 samp 
+stages<-list("VS","FT","FO","SS","SA","FM")
+datrdbsamp<-getIncProb(datrdbsamp,stages)
+#calcul incprob for H1 samp 
+stages<-list("FT","FO","SS","SA","FM")
+datrdbsamp4ratio<-getIncProb(datrdbsamp,stages)
 
-#add domain to FM and SA 
+
+#add domain to FM and SA for pop data
 #DOtime=temporal domain, DOtech=technical (metier), DOspp domain
 #find the domain where they are: generic key
 #DOtech and DOtime in FO, DOspp in SA
@@ -115,32 +124,117 @@ DO<-datrdbpop$FO%>%transmute(FOid,FTid,DOtech=FOgear,DOtime=FOendDate)%>%
 	left_join(datrdbpop$SA%>%transmute(SAid,SSid,DOspp=SAspeciesCodeFAO))%>%
 	#add the key to FM
 	left_join(datrdbpop$FM%>%transmute(FMid,SAid))
-
 #add domain to SA and FM
 datrdbpop$FM<-left_join(datrdbpop$FM,DO)
 datrdbpop$SA<-left_join(datrdbpop$SA,DO%>%select(-FMid)%>%distinct())
 
+#same for samp data
+DO<-datrdbsamp$FO%>%transmute(FOid,FTid,DOtech=FOgear,DOtime=FOendDate)%>%
+	#add the key to SS
+	left_join(datrdbsamp$SS%>%transmute(SSid,FOid))%>%
+	#add the key to SA
+	left_join(datrdbsamp$SA%>%transmute(SAid,SSid,DOspp=SAspeciesCodeFAO))%>%
+	#add the key to FM
+	left_join(datrdbsamp$FM%>%transmute(FMid,SAid))
+#add domain to SA and FM
+datrdbsamp$FM<-left_join(datrdbsamp$FM,DO)
+datrdbsamp$SA<-left_join(datrdbsamp$SA,DO%>%select(-FMid)%>%distinct())
+#same for samp data4ratio
+DO<-datrdbsamp4ratio$FO%>%transmute(FOid,FTid,DOtech=FOgear,DOtime=FOendDate)%>%
+	#add the key to SS
+	left_join(datrdbsamp4ratio$SS%>%transmute(SSid,FOid))%>%
+	#add the key to SA
+	left_join(datrdbsamp4ratio$SA%>%transmute(SAid,SSid,DOspp=SAspeciesCodeFAO))%>%
+	#add the key to FM
+	left_join(datrdbsamp4ratio$FM%>%transmute(FMid,SAid))
+#add domain to SA and FM
+datrdbsamp4ratio$FM<-left_join(datrdbsamp4ratio$FM,DO)
 #n@len
 
 # calculate a Horvitz Thompson estimate for total numbers at length by domain
 # assuming srs within the domain - this is valid for the RDBshare data
-est4nlenpop <- datrdbpop$FM%>%group_by(len=FMclass,year=DOtime,gear=DOtech,spp=DOspp)%>%summarise(n=sum(FMnumberAtUnit/inclusionProb),type="est")%>%
+#pop data
+est4nlenpop <- datrdbpop$FM%>%group_by(len=FMclass,year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(n=sum(FMnumberAtUnit/inclusionProb),type="est from pop")%>%
 	ungroup()#%>%transmute
+#samp data
+est4nlensamp <- datrdbsamp$FM%>%group_by(len=FMclass,year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(n=sum(FMnumberAtUnit/inclusionProb),type="est from samp")%>%
+	ungroup()
+#diag plot for ratio : plot n vs weight (and get the w samp for the ratio !)
+pipo<-datrdbsamp4ratio
+pipo1<-left_join(pipo$FM,
+		 pipo$SA%>%transmute(SAid,SSid,SAw=SAsampleWeightMeasured,SAp=inclusionProb))
+pipo2<-left_join(pipo1,pipo$SS%>%transmute(SSid,FOid,SSp=inclusionProb))
+uu1<-pipo2%>%
+	group_by(FOid,DOspp,DOtime,DOtech)%>%summarise(w=unique(SAw),n=sum(FMnumberAtUnit))%>%
+	ungroup()
+ggplot(uu1,aes(x=w,y=n,color=DOtime,group=DOtime))+geom_point()+facet_grid(DOtech~DOspp,scale="free")
+#ratio estimation time
+wsamp<-pipo$SA%>%
+	group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(w=sum(SAsampleWeightMeasured))%>%
+	ungroup()
+wpop<-datsim%>%group_by(year,gear,spp)%>%
+	summarise(wtot=sum(wspp))%>%ungroup()
+
+#samp data4ratio
+est4nlensamp4ratio <- datrdbsamp4ratio$FM%>%
+	#HT estimators from Trip to FM
+	group_by(len=FMclass,year=DOtime,gear=DOtech,spp=DOspp)%>%
+	#summarise(n=sum(FMnumberAtUnit/inclusionProb))%>%
+	summarise(n=sum(FMnumberAtUnit))%>%
+	#add sample weights and then pop w
+	ungroup()%>%left_join(wsamp)%>%left_join(wpop)%>%
+	#raise n@len using ratio estim
+	mutate(n=n*wtot/w,type="ratio estim")%>%
+	transmute(year,gear,spp,len,n,type)
+	
+	
+
+
+
 #graph
 tmp1<-datsim%>%group_by(year,gear,spp,len)%>%summarise(n=sum(n),type="pop")%>%ungroup()#filter(year==1)%>%mutate(vname=paste0("v",VDid),tname=paste0("t",TRid),ori="sim")
-ggplot(rbind(tmp1,est4nlenpop), aes(x=len,y=n,color=year,group=year))+#group=year,color=type))+
+#numerical table
+tmp1%>%select(-type)%>%left_join(est4nlenpop%>%transmute(year,gear,spp,len,npop=n))%>%
+	left_join(est4nlensamp%>%transmute(year,gear,spp,len,nsamp=n))%>%
+	left_join(est4nlensamp4ratio%>%transmute(year,gear,spp,len,nratio=n))%>%
+	filter(year==1,gear=="Beam",spp=="Cuckoo ray")
+#ggplot(rbind(tmp1,est4nlenpop), aes(x=len,y=n,color=year,group=year))+#group=year,color=type))+
+p1<-ggplot(rbind(tmp1,est4nlenpop,est4nlensamp,est4nlensamp4ratio)%>%filter(year==1), aes(x=len,y=n,color=type,group=type))+#group=year,color=type))+
 	geom_path()+
-	facet_grid(spp~gear+type,scale="free")+
+	facet_grid(spp~gear,scale="free")+
 	theme_bw()
+print(p1)
+
+stop("ici")
 
 
 # calculate a HT estimate for total landed weight using the sampled landed
 # weights
 # assuming srs etc as before
-estX <- tapply(datrdbpop$SA$SAtotalWtLive/datrdbpop$SA$incProbPrev,list(datrdbpop$SA$domain),sum)/1e3
+lansim<-datsim%>%group_by(year,gear,spp)%>%
+	summarise(w=sum(wspp),type="sim")%>%ungroup()
+lanpop<- datrdbpop$SA%>%group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(w=sum(SAtotalWeightMeasured/inclusionProb),type="est from pop")%>%
+	ungroup()#%>%transmute
+lansamp<- datrdbsamp$SA%>%group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(w=sum(SAtotalWeightMeasured/inclusionProb),type="est from samp")%>%
+	ungroup()#%>%transmute
+lanall<-rbind(lansim,lanpop,lansamp)
 
-# get the relevant population totals
-popX <- popDat[match(names(estX),rownames(popDat)),"liveWt"]
+p1<-ggplot(lanall, aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_grid(spp~gear,scale="free")+
+	theme_bw()
+print(p1)
+p1<-ggplot(lanall%>%group_by(year,gear,type)%>%summarise(w=sum(w)), aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_wrap(~type)+#,scale="free")+
+	theme_bw()
+print(p1)
+
 
 # calculate the ratio estimates for numbers at length
 estLR <- estL*matrix(rep(popX/estX,dim(estL)[1]),byrow=T,ncol=dim(estL)[2])
