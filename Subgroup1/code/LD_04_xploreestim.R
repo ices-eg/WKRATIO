@@ -149,6 +149,7 @@ DO<-datrdbsamp4ratio$FO%>%transmute(FOid,FTid,DOtech=FOgear,DOtime=FOendDate)%>%
 	left_join(datrdbsamp4ratio$FM%>%transmute(FMid,SAid))
 #add domain to SA and FM
 datrdbsamp4ratio$FM<-left_join(datrdbsamp4ratio$FM,DO)
+datrdbsamp4ratio$SA<-left_join(datrdbsamp4ratio$SA,DO%>%select(-FMid)%>%distinct())
 #n@len
 
 # calculate a Horvitz Thompson estimate for total numbers at length by domain
@@ -170,8 +171,9 @@ uu1<-pipo2%>%
 	group_by(FOid,DOspp,DOtime,DOtech)%>%summarise(w=unique(SAw),n=sum(FMnumberAtUnit))%>%
 	ungroup()
 ggplot(uu1,aes(x=w,y=n,color=DOtime,group=DOtime))+geom_point()+facet_grid(DOtech~DOspp,scale="free")
+ggsave("rezcheckratio.png")
 #ratio estimation time
-wsamp<-pipo$SA%>%
+wsamp<-datrdbsamp4ratio$SA%>%
 	group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
 	summarise(w=sum(SAsampleWeightMeasured))%>%
 	ungroup()
@@ -205,10 +207,31 @@ tmp1%>%select(-type)%>%left_join(est4nlenpop%>%transmute(year,gear,spp,len,npop=
 p1<-ggplot(rbind(tmp1,est4nlenpop,est4nlensamp,est4nlensamp4ratio)%>%filter(year==1), aes(x=len,y=n,color=type,group=type))+#group=year,color=type))+
 	geom_path()+
 	facet_grid(spp~gear,scale="free")+
+	ggtitle("year 1")
 	theme_bw()
 print(p1)
+ggsave("rezpopestimyear1.png")
+p1<-ggplot(rbind(tmp1,est4nlenpop,est4nlensamp,est4nlensamp4ratio)%>%filter(year==25), aes(x=len,y=n,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_grid(spp~gear,scale="free")+
+	ggtitle("year 25")
+	theme_bw()
+print(p1)
+ggsave("rezpopestimyear25.png")
 
-stop("ici")
+pipo<-rbind(tmp1,est4nlenpop,est4nlensamp,est4nlensamp4ratio)%>%
+	group_by(year,spp,type,len)%>%summarise(n=sum(n))%>%ungroup()
+p1<-ggplot(pipo, aes(x=len,y=n,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_grid(spp~year,scale="free")+
+	theme_bw()
+print(p1)
+ggsave("rezpopestim1.png")
+
+
+
+
+
 
 
 # calculate a HT estimate for total landed weight using the sampled landed
@@ -222,6 +245,90 @@ lanpop<- datrdbpop$SA%>%group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
 lansamp<- datrdbsamp$SA%>%group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
 	summarise(w=sum(SAtotalWeightMeasured/inclusionProb),type="est from samp")%>%
 	ungroup()#%>%transmute
+lansampratio<- datrdbsamp4ratio$SA%>%group_by(year=DOtime,gear=DOtech,spp=DOspp)%>%
+	summarise(w0=sum(SAtotalWeightMeasured/inclusionProb))%>%
+	ungroup()%>%left_join(wsamp)%>%left_join(wpop)%>%
+	mutate(w=w0*wtot/w,type="ratio estim")%>%
+	select(-wtot,-w0)%>%
+	ungroup()#%>%transmute
+
+lanall<-rbind(lansim,lanpop,lansamp,lansampratio)
+
+p1<-ggplot(lanall, aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_grid(spp~gear,scale="free")+
+	theme_bw()
+print(p1)
+ggsave("rezlan1.png")
+p1<-ggplot(lanall%>%group_by(year,gear,type)%>%summarise(w=sum(w)), aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
+	geom_path()+
+	facet_wrap(~type)+#,scale="free")+
+	theme_bw()
+print(p1)
+ggsave("rezlan2.png")
+
+
+# calculate the ratio estimates for numbers at length
+estLR <- estL*matrix(rep(popX/estX,dim(estL)[1]),byrow=T,ncol=dim(estL)[2])
+
+
+
+
+
+
+
+
+
+
+
+
+
+#naive (and probably wrong) ratio estimator
+#pop data
+wtot<-clrdb%>%
+	group_by(time=CLyear,metier=CLmetier6,space="all",spp=CLspecFAO)%>%
+	summarise(w=sum(CLoffWeight))%>%
+	ungroup()
+#samp data
+FOinfo<-datrdb$FO%>%transmute(FOid,time=FOendDate,metier=FOgear,space="all")%>%distinct()
+SSinfo<-datrdb$SS%>%transmute(FOid,SSid)%>%distinct()
+SAinfo<-datrdb$SA%>%transmute(SAid,SSid,spp=SAspeciesCode,
+			      wsamp=SAsampleWeightMeasured,wsamptot=SAtotalWeightMeasured)%>%distinct()
+FMinfo<-datrdb$FM%>%filter(FMtype=="l")%>%
+		transmute(FMid,SAid,len=FMclass,n=FMnumberAtUnit)
+#agg length tot
+wsamp<-SAinfo%>%left_join(SSinfo)%>%left_join(FOinfo)%>%
+	group_by(time,metier,space,spp)%>%
+	summarise(wsamp=sum(wsamp),wsamptot=sum(wsamptot))%>%
+	ungroup()
+
+nsamp<-FMinfo%>%left_join(SAinfo)%>%left_join(SSinfo)%>%left_join(FOinfo)%>%
+	ungroup()%>%
+	group_by(time,metier,space,spp,len)%>%
+	summarise( n=sum(n))%>%
+	ungroup() %>%left_join(wsamp)
+#merge nsamp and wtot
+nsamp<-left_join(nsamp,wtot)%>%mutate(npop=n*w/wsamptot)
+
+ggplot(nsamp,aes(x=len,y=npop))+geom_path()+facet_grid(metier~spp,scale="free")
+#load simulated data
+uu<-readRDS("../outputs/datapop.rds")
+npg<-readRDS("../outputs/datapopn.rds")%>%filter(year==1,value>0)%>%transmute(metier=gear,
+						time=year,
+						space="all",
+						spp,len,
+						n=value,type="ori")
+npgestim<-nsamp%>%transmute(metier,time,space,spp,len,n=npop,type="estim")
+pipo<-rbind(npg,npgestim)
+ggplot(pipo,aes(x=len,y=n,color=type,group=type))+geom_path()+facet_wrap(metier~spp,scale="free")
+
+#ggplot(pipo%>%filter(spp=="Dab"),aes(x=len,y=n,color=type,group=type))+geom_path()+facet_grid(metier~spp,scale="free")
+ggplot(pipo%>%filter(spp=="Dab"),aes(x=len,y=n,color=type,group=type))+geom_path()+facet_wrap(~type,scale="free")
+
+
+
+
+
 lanall<-rbind(lansim,lanpop,lansamp)
 
 p1<-ggplot(lanall, aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
@@ -229,11 +336,13 @@ p1<-ggplot(lanall, aes(x=year,y=w,color=type,group=type))+#group=year,color=type
 	facet_grid(spp~gear,scale="free")+
 	theme_bw()
 print(p1)
+ggsave("rezlan1.png")
 p1<-ggplot(lanall%>%group_by(year,gear,type)%>%summarise(w=sum(w)), aes(x=year,y=w,color=type,group=type))+#group=year,color=type))+
 	geom_path()+
 	facet_wrap(~type)+#,scale="free")+
 	theme_bw()
 print(p1)
+ggsave("rezlan2.png")
 
 
 # calculate the ratio estimates for numbers at length
