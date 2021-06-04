@@ -187,7 +187,47 @@ total_stratified <- function(strata_totals){
 
 }
 
-ratio_variance_wo_N <- function(){}
+#' Estimate variance of ratio
+#' @description
+#'  Approximate estimation for the variance of the ratio between numberAtAge and weight
+#'  Adapted from Hankin, Mohr and Newman, Eq. 7.19
+#'
+#'  The 'sampleTable' is a table representing one of the leves in the RDBES hierarchy and has necessary information about stratification etc.
+#'  The 'numAtAge' table and the 'totalWeight' table contains estimate of the number at age and the catch weight for each of the unit in the sample.
+#'  In addition they contain a column identifying the sample unit. E.g 'FOid' if 'sampleTable' is an FO-table, or 'LEid' if the sampleTable is an 'LE'-table
+#'
+#'  Halts with error if the sample is a clustered sample
+#' @param sampleUnitType character identifying the kind of sample units in the sample, follows the record type sin RDBES, e.g. "FO" for an FO-table.
+#' @param sampleTable table with information about the sample (e.g. FO-table in the RBDES data model)
+#' @param numAtAge data.frame with columns: 'age' (int), 'total' (num, estimated total for sample unit), and a column identifying the sample unit (see details).
+#' @param totalWeight data.frame with columns: 'total' (num, estimated total for sample unit), and a column identifying the sample unit (see details).
+#' @param parentIdname name of column sampleUnitType that identifies the parent sample in the RDBES hierachy.
+#' @param fpc (N-n)/N, where N is population size and n is sample size. Defaults to 1, which is applicable when N >> n
+#' @return data.frame with columns parentname (int), stratum (chr), age (int), and variance (num)
+#' @export
+ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeight, parentIdname, fpc=1){
+  ratios <- ratio_wo_N(sampleUnitType, sampleTable, numAtAge, totalWeight, parentIdname)
+
+  sampleSize <- aggregate(list(sSize=sampleTable$FOstratumName), by=list(parent=sampleTable[[parentIdname]], stratum=sampleTable$FOstratumName), length)
+
+  vars <- merge(numAtAge, ratios)
+  vars <- merge(vars, totalWeight)
+
+  vars$estTot <- vars$ratio * vars$weight
+  vars$estDiff <- vars$total - vars$estTot
+  vars$sqDiff <- vars$estDiff**2
+
+  # Eq. 7.17
+  varPrStratum <- aggregate(list(variance=vars$sqDiff), by=list(parent=vars[[parentIdname]], stratum=vars$stratum, age=vars$age), sum)
+  varPrStratum <- merge(varPrStratum, sampleSize)
+  varPrStratum$variance <- varPrStratum$variance * (varPrStratum$sSize / (varPrStratum$sSize-1)) * fpc
+  names(varPrStratum)[1] <- parentIdname
+
+  # Eq. 7.19
+  mw <- sum(totalWeight$weight)
+  varPrStratum$variance <- varPrStratum$variance / (mw**2)
+  return(varPrStratum)
+}
 
 ratio_variance_strata <- function(){}
 

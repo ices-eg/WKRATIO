@@ -27,6 +27,10 @@ haulWeight <- totalWeightHaulHT(samples$SS, ssWeight)
 context("Test ratio_wo_N")
 ratios <- ratio_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
 
+context("Test ratio_variance_wo_N")
+ratio_vars <- ratio_variance_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
+expect_true(all((sqrt(ratio_vars$variance) / ratios$ratio)<1))
+
 land <- landings$CL
 land$stratum <- "U"
 
