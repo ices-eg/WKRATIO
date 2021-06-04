@@ -150,6 +150,10 @@ ratio_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeight, paren
 }
 
 #' Estimates total number at age for each strata and sampling scheme.
+#' @details
+#'  Haults with error if 'SDid' is not a column of 'ratios'
+#'  Haults with error of 'stratum' is not a column of 'landings'
+#'  Haults with error if ratios are not provided for all strata or if ratios are provided for strata not in cencus ('landings')
 #' @param ratios data.frame with columns SDid (int), stratum (chr), age (int), ratio (num)
 #' @param landings CL table with the column 'stratum' added
 #' @return data.frame with columns SDid (int), stratum (chr), age (int), numAtAge (num)
@@ -208,7 +212,7 @@ total_stratified <- function(strata_totals){
 ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeight, parentIdname, fpc=1){
   ratios <- ratio_wo_N(sampleUnitType, sampleTable, numAtAge, totalWeight, parentIdname)
 
-  sampleSize <- aggregate(list(sSize=sampleTable$FOstratumName), by=list(parent=sampleTable[[parentIdname]], stratum=sampleTable$FOstratumName), length)
+  sampleSize <- stats::aggregate(list(sSize=sampleTable$FOstratumName), by=list(parent=sampleTable[[parentIdname]], stratum=sampleTable$FOstratumName), length)
 
   vars <- merge(numAtAge, ratios)
   vars <- merge(vars, totalWeight)
@@ -218,7 +222,7 @@ ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeig
   vars$sqDiff <- vars$estDiff**2
 
   # Eq. 7.17
-  varPrStratum <- aggregate(list(variance=vars$sqDiff), by=list(parent=vars[[parentIdname]], stratum=vars$stratum, age=vars$age), sum)
+  varPrStratum <- stats::aggregate(list(variance=vars$sqDiff), by=list(parent=vars[[parentIdname]], stratum=vars$stratum, age=vars$age), sum)
   varPrStratum <- merge(varPrStratum, sampleSize)
   varPrStratum$variance <- varPrStratum$variance * (varPrStratum$sSize / (varPrStratum$sSize-1)) * fpc
   names(varPrStratum)[1] <- parentIdname
@@ -226,12 +230,53 @@ ratio_variance_wo_N <- function(sampleUnitType, sampleTable, numAtAge, totalWeig
   # Eq. 7.19
   mw <- sum(totalWeight$weight)
   varPrStratum$variance <- varPrStratum$variance / (mw**2)
+  varPrStratum$sSize <- NULL
+
   return(varPrStratum)
 }
 
-ratio_variance_strata <- function(){}
+#' Variance for ratio estimates of totals
+#' @description
+#'  Estimates variance for totals in strata estimated by ratio estimator.
+#' @details
+#'  Haults with error if 'SDid' is not a column of 'ratios'
+#'  Haults with error of 'stratum' is not a column of 'landings'
+#'  Haults with error if ratios are not provided for all strata or if ratios are provided for strata not in cencus ('landings')
+#' @param ratio_variances variance of ratios data.frame with columns SDid (int), stratum (chr), age (int), variance (num)
+#' @param landings CL table with the column 'stratum' added
+#' @return ratio_variances with variance replaced with the variance for the strata total
+#' @export
+ratio_variance_strata <- function(ratio_variances, landings){
 
-ratio_variance_total <- function(){}
+  stopifnot("SDid" %in% names(ratio_variances))
+  stopifnot("stratum" %in% names(landings))
+  stopifnot(all(landings$stratum %in% ratio_variances$stratum))
+  stopifnot(all(ratio_variances$stratum %in% landings$stratum))
+
+  land <- stats::aggregate(list(weight=landings$CLofficialWeight), by=list(stratum=landings$stratum), sum)
+
+  strata_vars <- merge(ratio_variances, land[,c("stratum", "weight")])
+  strata_vars$variance <- strata_vars$variance * (strata_vars$weight*1000)**2
+  strata_vars$weight <- NULL
+  return(strata_vars)
+}
+
+#' Estimates variance for grand total
+#' @description
+#'  Estimates variance for grand total number at age from strata variances
+#' @param strata_variances data.frame with columns SDid (int), stratum (chr), age (int), variance (num)
+#' @return data.frame with columns age (int) and variance (num)
+#' @export
+variance_stratified <- function(strata_variances){
+  stopifnot(all(!is.na(strata_variances$age)))
+  schemecounts <- stats::aggregate(list(schemes=strata_variances$SDid), by=list(stratum=strata_variances$stratum, age=strata_variances$age), function(x){length(unique(x))})
+  if (any(schemecounts$schemes > 1)){
+    stop("Overlapping sampling schemes not supported. Some age is reported in the same strata with different SDid")
+  }
+
+  totalVar <- stats::aggregate(list(variance=strata_variances$variance), by=list(age=strata_variances$age), sum)
+  return(totalVar)
+}
 
 
 

@@ -27,10 +27,6 @@ haulWeight <- totalWeightHaulHT(samples$SS, ssWeight)
 context("Test ratio_wo_N")
 ratios <- ratio_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
 
-context("Test ratio_variance_wo_N")
-ratio_vars <- ratio_variance_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
-expect_true(all((sqrt(ratio_vars$variance) / ratios$ratio)<1))
-
 land <- landings$CL
 land$stratum <- "U"
 
@@ -40,6 +36,19 @@ est <- ratio_estimate_strata(ratios, land)
 context("Test total_stratified")
 total <- total_stratified(est)
 
+context("Test ratio_variance_wo_N")
+ratio_vars <- ratio_variance_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
+expect_true(all((sqrt(ratio_vars$variance) / ratios$ratio)<1))
+
+context("Test ratio_variance_strata")
+strata_vars <- ratio_variance_strata(ratio_vars, land)
+expect_equal(nrow(strata_vars), nrow(est))
+estTab <- merge(strata_vars, est)
+expect_true(all((sqrt(estTab$variance) / estTab$numAtAge)<1))
+
+variance_stratified(strata_vars)
+totalVar <- variance_stratified(strata_vars)
+expect_equal(nrow(totalVar), length(unique(totalVar$age)))
 
 context("Test stratfied ratio estimate")
 fos <- samples$FO

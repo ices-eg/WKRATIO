@@ -4,10 +4,12 @@
 \alias{plotNumAtAge}
 \title{Plot number at age}
 \usage{
-plotNumAtAge(numAtAge)
+plotNumAtAge(numAtAge, variance = NULL)
 }
 \arguments{
 \item{numAtAge}{data.frame with the columns 'age' (int) and 'numAtAge' (num)}
+
+\item{variance}{data.frame with columns age (int) and variance (num)}
 }
 \description{
 Plot number at age

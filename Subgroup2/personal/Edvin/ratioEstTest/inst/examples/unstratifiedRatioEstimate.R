@@ -27,9 +27,13 @@ haulWeight <- totalWeightHaulHT(sampleData$SS, ssWeight)
 ratios <- ratio_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
 est <- ratio_estimate_strata(ratios, landingsData)
 
+ratio_vars <- ratio_variance_wo_N("FO", samples$FO, haulTotals, haulWeight, "SDid")
+strata_vars <- ratio_variance_strata(ratio_vars, landingsData)
+
 #
 # design-based stuff again
 #
 total <- total_stratified(est)
+totalVar <- variance_stratified(strata_vars)
 
-plotNumAtAge(total)
+plotNumAtAge(total, totalVar)

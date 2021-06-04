@@ -5,6 +5,8 @@ Version: 0.1.0
 Author: Edvin Fuglebakk
 Maintainer: Edvin Fuglebakk <Edvin.Fuglebakk@hi.no>
 Description: Testing ratio estimation with RDBES.
+ Prototypes various methods to support ratio estimation
+ Examples of applications are stored in inst/examples
 License: LGPL
 Encoding: UTF-8
 LazyData: true
