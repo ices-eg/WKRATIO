@@ -6,7 +6,7 @@ landingsData <- landingsData[landingsData$CLspeciesFaoCode == "MAC",]
 
 
 #
-# preprosessing
+# data prosessing
 #
 sampleData$SA <- sampleData$SA[!is.na(sampleData$SA$SAtotalWeightLive),]
 sampleData$SA <- sampleData$SA[sampleData$SA$SAstratification=="N",]
