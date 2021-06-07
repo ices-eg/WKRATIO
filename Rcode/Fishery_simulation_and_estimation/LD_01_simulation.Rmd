@@ -1,0 +1,371 @@
+---
+title: "Modelling of a length-based multi-species population targeted by a mixed fishery"
+author: "Laurent Dubroca"
+date: "`r Sys.Date()`"
+output: html_document
+bibliography: '/home/moi/Zotero/exportdb/My Library.bib'
+---
+
+# Framework
+
+This report runs a length-based multi-species population model targeted by a
+mixed fishery following @spence2020 (based on @hall2006). 
+The model choice is related to the need of having a population structured in length
+in order to then simulate sampling in it, and to have a model easily accessible in R.
+The fishery catches are modelled by gear, and species preference and catchability
+are highly customisable. These conditions are necessary to simulate realistic concurrent 
+sampling plan.
+
+# Package and co
+
+Library are loaded and code sourced, if any.
+
+```{r setup, include=T}
+#link https://github.com/CefasRepRes/LeMaRns 
+#https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0227767
+library(LeMaRns)
+#basic stuff
+library(ggplot2)
+library(dplyr)
+```
+
+# Population and fishery modelling
+
+## Simulation test
+
+To test the model, the example input parameters from @thorpe2015 are used (21 species, 50 years), with a constant fishing effort.
+The SSB is plotted.
+
+```{r runexample, include=T,eval=T}
+#a short test
+NS_params <- LeMansParam(NS_par, tau=NS_tau, eta=NS_eta, L50=NS_L50,other=1e12)
+#NS_par: species growth and co
+#tau: interaction matrix (row prey columns predator if 1 ij means j eat i)
+#eta: steepness of the catchability curve
+#L50: length @50% of the max catchability of the catchability curve
+#other: amount of other food available for prey not in the model (in g)
+#mortality: background mortality M1, pred mortality M2, fishing mort F
+#see help for the description for the other parameters
+#effort
+effort <- matrix(0.25, 50, dim(NS_params @Qs)[3])
+#4 gears
+model_run <- run_LeMans(NS_params, years=50, effort=effort)
+plot_SSB(NS_params,model_run)
+```
+
+## Simulation : biology and fishery
+
+The biological model follows the example given by the library.
+The fishery models follows the package's vignette example : 4 gears with different species
+preference and catchability curves are used at a very low effort (0.25 at the model scale).
+This low level of exploitation let the biological model fluctuates only based on the population processes.
+
+```{r bunbioeff, include=T,eval=T}
+## mixed fishery
+## setup the model
+NS_params <- LeMansParam(df=NS_par, gdf = NS_mixed_fish, tau=NS_tau, eta=NS_eta, L50=NS_L50, other=NS_other)
+#gear and effort definition (0 -> no fishery)
+effort <- matrix(0, 50, dim(NS_params@Qs)[3])
+colnames(effort) <- c("Industrial", "Otter", "Beam", "Pelagic")
+### run the initial 50 years with no fishery
+model_run <- run_LeMans(NS_params, years=50, effort=effort)
+#define a very low fishing effort
+ef<-as.numeric(rep(0.25,4))
+effort_mat <- matrix(ef, 50, dim(NS_params@Qs)[3], byrow=T)
+colnames(effort_mat) <- c("Industrial", "Otter", "Beam", "Pelagic")
+### run the model
+model_run <- run_LeMans(params=NS_params, N0=model_run@N[,,501], years=50, effort=effort_mat)
+#plot SSB and biomass
+plot_SSB(inputs=NS_params,outputs=model_run,full_plot_only=T)
+#png("rezbiomass.png")
+plot_biomass(inputs=NS_params,outputs=model_run,full_plot_only=T)
+#dev.off()
+
+#get annual catch per gear dim i species j gear k timestep
+ycatch<-data.frame((get_annual_catch(NS_params,outputs=model_run)))
+colnames(ycatch)<-NS_params@species_names
+ycatch$year<-1:50
+pipo<-tidyr::pivot_longer(ycatch,cols=1:length(NS_params@species_names))
+ggplot(pipo,aes(x=year,y=value,color=name))+geom_line()
+
+#get catch per gear
+cpg0<-get_CPG(inputs=NS_params,outputs=model_run,effort=effort_mat,years=50)
+#add names to pivot_longer the array
+attr(cpg0,"dimnames")[[1]]<-NS_params@species_names
+attr(cpg0,"dimnames")[[2]]<-names(data.frame(effort_mat))
+phi_min<-0.1
+nbstep<-dim(cpg0)[3]
+nbyear<-(nbstep)*phi_min
+idyear<-ceiling(((1:(nbyear/phi_min))*phi_min))
+attr(cpg0,"dimnames")[[3]]<-paste0("Y",idyear)
+cpg0long<-data.frame(ftable(cpg0))%>%
+	transmute(spp=as.character(Var1),
+		  year=as.numeric(sub("Y","",as.character(Var3))),
+		  gear=as.character(Var2),
+		  value=Freq)%>%
+	group_by(spp,year,gear)%>%summarise(value=sum(value,na.rm=T))%>%
+	ungroup()
+#png("rezcatch.png")
+ggplot(cpg0long,aes(x=year,y=value,color=spp))+geom_line()+facet_wrap(~gear)
+#dev.off()
+
+#build a function to get number at len by gear {{{
+#parameters
+get_NPG<-function(Catch,Qs,effort,years=nrow(effort),phi_min=0.1){
+#if(F){
+#Catch<-model_run@N
+#Qs<-NS_params@Qs
+#effort<-effort_mat
+#years<-nrow(effort)
+#ph_min<-0.1
+#}
+	Catch<-Catch[,,-1]
+        tot_time <- dim(Catch)[3]
+        Fs <- array(0, dim=c(dim(Catch)[1], dim(Catch)[2], tot_time,dim(Qs)[3]))
+        year <- ceiling(1:tot_time*phi_min)
+	dimnames(Fs)[[4]] <- colnames(effort)
+	for (j in colnames(effort)) {
+	  for (ts in 1:tot_time) {
+	    Fs[,,ts,j] <- effort[year[ts], j]*Qs[,,j]
+	  }
+	}
+	#norm of fishing mort
+ 	tele0<-Fs
+            for (ts in 1:tot_time) {
+              tmp <- apply(Fs[,,ts,], c(1,2), sum)
+              for(j in 1:dim(tele0)[4]) {
+                tele <- Fs[,,ts,j]/tmp
+                if (any(is.na(tele))) {
+                  tele[is.na(tele)] <- 0
+                }
+		tele0[,,ts,j]<-tele
+              }
+	    }
+	#get N fish by gear
+	NPG<-tele0
+        for(j in 1:dim(tele0)[4]) {
+		NPG[,,,j]<-tele0[,,,j]*Catch
+	}
+	attr(NPG,"dimnames")[[1]]<-paste0("L",NS_params@u_bound)
+	attr(NPG,"dimnames")[[2]]<-NS_params@species_names
+	nbstep<-dim(NPG)[3]
+	nbyear<-(nbstep)*phi_min
+	idyear<-ceiling(((1:(nbyear/phi_min))*phi_min))
+	attr(NPG,"dimnames")[[3]]<-paste0("Y",idyear)
+	return(NPG)
+}#}}}
+npg0<-get_NPG(Catch=model_run@N,Qs=NS_params@Qs,effort=effort_mat,years=nrow(effort),phi_min=0.1)
+
+npg0long<-data.frame(ftable(npg0))%>%
+	transmute(len=as.numeric(sub("L","",as.character(Var1))),
+		  spp=as.character(Var2),
+		  year=as.numeric(sub("Y","",as.character(Var3))),
+		  gear=as.character(Var4),
+		  value=Freq)%>%
+	group_by(len,spp,year,gear)%>%summarise(value=sum(value,na.rm=T))%>%
+	ungroup()
+#plot the len distrib by year/gear/years
+ggplot(npg0long,aes(x=len,y=value,color=year,group=year))+geom_line()+facet_grid(spp~gear,scales="free")
+#ggsave("reznlenpop.png")
+```
+
+## Simulation : detailed fishery activities 
+
+As it is, LeMaRns models produces bulk catches by gear.
+The following code details the fishery catches by vessels, trips and fishing operation.
+These units are generated randomly following some inputs parameters. 
+In this report there are
+4 Beam, 2 Industrial, 4 Otter and 3 Pelagic vessels.
+Each of them do randomly 1 to 20 trips a year, in which 1 to 20 fishing operations occurs.
+The number of active vessels by year vary from 1 to the maximum of number of the considered gear.
+Biological parameters are added to the simulation (fish weights, ages...).
+The catch for each fishing operation is a fraction of the total catch of the
+gear, taken randomly and normalized to keep the total catch of the gear equal to
+the LeMaRns total catches.
+
+```{r simusamp,eval=T}
+#improvment: generating trrrrip for the whole pop and sampling theeeeeeem
+#npg0long,NS_params,n1=20,nbvess=data.frame(gear=c("Beam","Industrial","Otter","Pelagic"),nvess=c(4,2,4,3))
+#ntrip is 1:n1
+	#add vessel vessel trip proportionnal
+	tr0<-npg0long%>%select(year,gear)%>%distinct()
+	#generate a vessel population and related trip
+	nbvess<-data.frame(gear=c("Beam","Industrial","Otter","Pelagic"),nvess=c(4,2,4,3))
+	#generate up to 20 FO by gear and gear and up to max fo trip
+	nfo<- tr0%>%rowwise()%>%mutate(nfo=sample(1:20,1))%>%
+		mutate(ntrip=sample(1:nfo,1,replace=T))%>%
+		ungroup()%>%
+		left_join(nbvess)
+	#trip id + FO id
+	nfo<-nfo[rep(1:nrow(nfo),times=nfo$nfo),]%>%
+		group_by(year,gear,nfo)%>%
+		mutate(FOid=row_number())%>%ungroup()%>%
+		rowwise()%>%
+		mutate(TRid=sample(1:ntrip,1,replace=TRUE))%>%
+		group_by(year,gear,TRid)%>%
+		mutate(FOid=row_number())%>%ungroup()%>%
+		arrange(year,gear,TRid,FOid)%>%
+		ungroup()
+	#separate elaboration of vess id (unique by trip: trick for that)
+	nvesstmp<-nfo%>%select(year,gear,TRid,nvess)%>%distinct()%>%
+		rowwise()%>%mutate(VDid=sample(1:nvess,1,replace=T))%>%
+		ungroup()
+	nall<-nfo%>%left_join(nvesstmp)
+	#generate the prop of the catch taken by each FO
+	nall<-nall%>%group_by(year,gear)%>%mutate(prop=runif(nfo))%>%
+		mutate(prop=prop/sum(prop))%>%ungroup()
+	#pipo%>%group_by(year,gear)%>%summarise(tot=sum(prop))%>%filter(tot!=1)
+	npg0longsim<-left_join(nall,npg0long)%>%mutate(value=value*prop)%>%
+		filter(value>0)%>%select(-prop)
+	#add nspp tot
+	npg0longsim<-npg0longsim%>%
+		group_by(year,gear,FOid,TRid,VDid)%>%
+		mutate(nspp=n_distinct(spp))%>%
+		group_by(year,gear,TRid,VDid)%>%
+		mutate(nfo=n_distinct(FOid))%>%
+		group_by(year,gear,VDid)%>%
+		mutate(ntrip=n_distinct(TRid))%>%
+		group_by(year,gear)%>%
+		mutate(nvess=n_distinct(VDid))%>%
+		ungroup()
+
+
+	#check
+	pipo1<-npg0longsim%>%group_by(year,gear,len,spp)%>%summarise(value0=sum(value))%>%ungroup()
+	uu<-full_join(pipo1,npg0long)%>%filter(abs(value0-value)>1)
+	if(nrow(uu)>0){strop("pb trip prop")}
+	#npg0longsim%>%filter(year==1,gear=="Beam",FOid==1,TRid==1,VDid==1)
+	#add biological information
+	lwa<-data.frame(spp=NS_params@species_names,a=NS_params@W_a,b=NS_params@W_b,
+			Linf=NS_params@Linf,k=NS_params@k)
+	npg0longsim<-npg0longsim%>%left_join(lwa)
+	npg0longsim$wind<-npg0longsim$a*npg0longsim$len^npg0longsim$b
+	#add age
+	fct1<-function(t0=0,K,Linf,L){ max(1, ((-log(1 - L/Linf))/K + t0))}
+	npg0longsim<-npg0longsim%>%mutate(lentmp=ifelse(len>Linf,Linf-1e-1,len))%>%
+		rowwise()%>%
+		mutate(age=fct1(0,k,Linf,lentmp))%>%
+		ungroup()
+	#ggplot(npg0longsim,aes(x=len,y=age,group=spp,color=spp))+geom_point()
+	#add to w by spp
+	npg0longsim<-npg0longsim%>%mutate(wspp=value*wind)
+	#clean the data
+	npg0longsim<-npg0longsim%>%transmute(year,gear,nspp,nfo,ntrip,nvess,FOid,TRid,VDid,spp,len,age,
+					  n=value,wind,wspp)
+	reztmp<-npg0longsim%>%select(year,gear,VDid,TRid,FOid)%>%distinct()%>%
+		group_by(year,gear,VDid,TRid)%>%summarise(nfo=n_distinct(FOid))%>%
+		ungroup()
+	ggplot(reztmp,aes(x=year,y=nfo,group=TRid,color=TRid))+
+		geom_path()+facet_grid(gear~VDid)+
+		ggtitle("FO by trip, vessel and gear")
+```
+
+## Simulation : sampling the simulated fishery activities 
+
+On the simulated detailed fishery activities, a yearly random selection is
+operated on a fraction of the catches related to a fishing operation.
+The sampling is stratified by gear (1 vessel by gear each year) and trips (1 trip). 
+The fishing operations follows are
+sampled systematically (1 every 3 operations are sampled). 15 species over the
+21 available are selected randomly and 10 % of the corresponding
+catches are reported as sampled. This scenario mimics at-sea sampling.
+
+```{r simusampplan,eval=T}
+	#sampling scheme
+	#nb vessel, nbtrip ,n FO and prop sampled
+	nplanVD<-2;nplanTR<-1;nplanFO<-seq(1,max(npg0longsim$nfo),2);
+	nplanSPP<-15;planprop<-0.1
+	#sample space 
+	sampspace<-npg0longsim%>%select(year,gear,spp,FOid,TRid,VDid)%>%
+		distinct()
+	#random sampling of 2 vessels by strata
+	sampVD<-sampspace%>%select(year,gear,VDid)%>%
+		distinct()%>%
+		group_by(year,gear)%>%
+		slice_sample(n=nplanVD,replace=F)%>%
+		ungroup()%>%
+		mutate(VDsamp=TRUE)
+	sampspace<-left_join(sampspace,sampVD)%>%mutate(VDsamp=ifelse(is.na(VDsamp),F,VDsamp))
+	#weighted random sampling of 1 trip by vessels by strata (aka the vessel
+	#with the more trip are highest proba of selection)
+	sampTR<-sampspace%>%filter(VDsamp==T)%>%select(year,gear,VDid,TRid)%>%
+		distinct()%>%
+		group_by(year,gear,VDid)%>%mutate(nbtrip=n_distinct(TRid))%>%
+		group_by(year,gear,VDid)%>%
+		slice_sample(n=nplanTR,weight_by=nbtrip,replace=F)%>%
+		ungroup()%>%
+		mutate(TRsamp=TRUE)%>%
+		select(-nbtrip)
+	sampspace<-left_join(sampspace,sampTR)%>%mutate(TRsamp=ifelse(is.na(TRsamp),F,TRsamp))
+	#take one FO on 3
+	sampspace<-sampspace%>%
+		mutate(FOsamp=VDsamp&TRsamp&FOid%in%nplanFO)
+	#plan to sample 10% of the catch
+	sampspace<-sampspace%>%
+		mutate(propsamp=ifelse(FOsamp,planprop,0))
+	#take n species over the whole species there
+	sampSPP<-sampspace%>%filter(VDsamp==T&TRsamp&FOsamp==T)%>%select(year,gear,VDid,TRid,FOid,spp)%>%
+		distinct()%>%
+		group_by(year,gear,VDid,TRid,FOid)%>%mutate(nbspp=n_distinct(spp))%>%
+		group_by(year,gear,VDid,TRid,FOid)%>%
+		slice_sample(n=nplanSPP,replace=F)%>%
+		ungroup()%>%
+		mutate(SPPsamp=TRUE)%>%
+		select(-nbspp)
+	#sampSPP%>%filter(year==1,gear=="Beam")
+	#merge
+	sampspace<-left_join(sampspace,sampSPP)%>%mutate(SPPsamp=ifelse(is.na(SPPsamp),F,SPPsamp))
+
+	#add the sampling plan to npglon
+	npg0longsim<-left_join(npg0longsim,sampspace)
+	#compute subtotal for some parameters
+	npg0longsim<-npg0longsim%>%
+		group_by(year,gear,FOid,TRid,VDid)%>%
+		mutate(wFO=sum(wspp))%>%
+		group_by(year,gear,TRid,VDid)%>%
+		mutate(wTR=sum(wspp))%>%
+		group_by(year,gear,VDid)%>%
+		mutate(wVD=sum(wspp))%>%
+		ungroup()
+	#check
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(wVD)%>%unique()%>%pull
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(TRid,wTR)%>%distinct()%>%pull(wTR)%>%sum()
+	#npg0longsim%>%filter(year==1,gear=="Beam",VDid==2)%>%select(FOid,wFO)%>%distinct()%>%pull(wFO)%>%sum()
+	#sum(npg0longsim$wspp)
+	#npg0longsim%>%select(gear,year,VDid,wVD)%>%distinct()%>%pull(wVD)%>%sum()
+	#npg0longsim%>%select(gear,year,VDid,TRid,wTR)%>%distinct()%>%pull(wTR)%>%sum()
+	#npg0longsim%>%group_by(year,gear,nfo,ntrip,nvess,FOid,TRid,VDid)%>%summarise(nbfo=n_distinct(FOid))
+
+	#npg0longsim%>%select(year,gear,VDid,TRid,FOid,nspp,nfo,ntrip,nvess)%>%arrange(year,gear,VDid,TRid,FOid)%>%distinct()
+	tmp<-npg0longsim%>%filter(FOsamp==T)%>%
+		group_by(year,gear,len,spp)%>%
+		summarise(n=sum(n*propsamp))%>%
+		ungroup()
+	#plot the len distrib by year/gear/years
+	ggplot(tmp,aes(x=len,y=n,color=year,group=year))+
+		geom_line(alpha=0.7)+
+		facet_grid(spp~gear,scales="free")+
+		ggtitle("Sampled length by year")+
+		theme_bw()
+
+```
+
+# Outputs
+
+Simulated population data and sampling are saved.
+
+```{r output,eval=T}
+saveRDS(npg0longsim,file="./outputs/datasimu.rds")
+#truc for CL
+saveRDS(cpg0long,file="./outputs/datapop.rds")
+saveRDS(npg0long,file="./outputs/datapopn.rds")
+
+```
+
+# R session information
+
+```{r Rsession,cache=TRUE,eval=T,echo=T,cache=T,include=T}
+sessioninfo::session_info()
+```
+
+# References
