@@ -33,7 +33,7 @@ library(dplyr)
 
 ## Simulation test
 
-To test the model, the example input parameters from @thorpe2015 are used (21 species, 50 years), with a constant fishing effort.
+To test the model, the example input parameters from @thorpe2016 and @thorpe2015 are used (21 species, 50 years), with a constant fishing effort.
 The SSB is plotted.
 
 ```{r runexample, include=T,eval=T}
