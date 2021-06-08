@@ -2,6 +2,10 @@
 #' Plot number at age
 #' @param numAtAge data.frame with the columns 'age' (int) and 'numAtAge' (num)
 #' @param variance data.frame with columns age (int) and variance (num)
+#' @examples
+#'  data(officialTotalMac)
+#'  data(officialVarMac)
+#'  plotNumAtAge(officialTotalMac, officialVarMac)
 #' @export
 plotNumAtAge <- function(numAtAge, variance=NULL){
 
