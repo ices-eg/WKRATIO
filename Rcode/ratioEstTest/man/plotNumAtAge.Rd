@@ -14,3 +14,8 @@ plotNumAtAge(numAtAge, variance = NULL)
 \description{
 Plot number at age
 }
+\examples{
+ data(officialTotalMac)
+ data(officialVarMac)
+ plotNumAtAge(officialTotalMac, officialVarMac)
+}
