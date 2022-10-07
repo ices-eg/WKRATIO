@@ -37,4 +37,10 @@ topsp <- as.numeric(names(sort(-table(nsamp$spp))))[1:5]
 
 ggplot(subset(nsamp1,spp%in%topsp),aes(x=len,y=npop))+geom_path()+facet_grid(metier~spp,scale="free")
 
+###
 
+FMinfo1 <- H1$FM %>% group_by(SAid) %>% summarise(n=sum(as.numeric(FMnumberAtUnit)))
+nsamp1 <- FMinfo1%>%left_join(SAinfo)%>%left_join(SSinfo)%>%left_join(FOinfo)
+
+ggplot(subset(nsamp1,spp%in%topsp),aes(n,wsamp,col=metier)) + geom_point() +facet_wrap(~spp,scale="free")
+       
